@@ -51,6 +51,6 @@ export function sortPlayers(
   sortDir: 1 | -1,
 ): PlayerStats[] {
   return [...players].sort(
-    (a, b) => sortDir * ((b[sortCol] ?? 0) - (a[sortCol] ?? 0)),
+    (a, b) => sortDir * ((a[sortCol] ?? 0) - (b[sortCol] ?? 0)),
   );
 }

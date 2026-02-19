@@ -32,6 +32,7 @@ interface EspnCompetition {
   competitors?: EspnCompetitor[];
   status?: {
     type?: {
+      state?: string;
       shortDetail?: string;
     };
   };
@@ -87,6 +88,7 @@ interface GameDetails {
   players: Record<string, PlayerStats[]>;
   teamLogos: Record<string, string>;
   teamColors: Record<string, TeamColors>;
+  statusState?: string;
   statusText?: string;
 }
 
@@ -162,6 +164,7 @@ export async function fetchGameDetails(eventId: string): Promise<GameDetails> {
     players,
     teamLogos,
     teamColors,
+    statusState: competition.status?.type?.state,
     statusText: competition.status?.type?.shortDetail,
   };
 }
@@ -204,6 +207,7 @@ function parseEventGame(event: EspnEvent): Game | null {
     },
     teamLogos: mapTeamLogos([homeTeam, awayTeam]),
     teamColors: mapTeamColors([homeTeam, awayTeam]),
+    statusState: competition.status?.type?.state,
     statusText: competition.status?.type?.shortDetail,
   };
 }

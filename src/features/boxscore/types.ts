@@ -82,6 +82,7 @@ export interface Game {
   players: Record<string, PlayerStats[]>;
   teamLogos?: Record<string, string>;
   teamColors?: Record<string, TeamColors>;
+  statusState?: "pre" | "in" | "post" | string;
   statusText?: string;
 }
 

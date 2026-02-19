@@ -18,6 +18,8 @@ import type {
   TeamCode,
 } from "./types";
 
+const LIVE_REFRESH_INTERVAL_MS = 30_000;
+
 export function BoxScoreDashboard() {
   const [games, setGames] = useState<Game[]>(GAMES);
   const [selectedGameId, setSelectedGameId] = useState<string>(GAMES[0]?.id ?? "");
@@ -29,6 +31,9 @@ export function BoxScoreDashboard() {
   const [loadingGames, setLoadingGames] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [detailsFetchedAtByGame, setDetailsFetchedAtByGame] = useState<
+    Record<string, number>
+  >({});
 
   const theme = useMemo(() => mkTheme(dark), [dark]);
 
@@ -84,12 +89,17 @@ export function BoxScoreDashboard() {
     );
   }, [game]);
 
+  const isPregame = game?.statusState === "pre";
+  const isLiveGame = game?.statusState === "in";
+  const lastDetailsFetchAt = game ? detailsFetchedAtByGame[game.id] ?? 0 : 0;
+
   useEffect(() => {
-    if (!game || hasBoxscoreData) {
+    if (!game || isPregame || (!isLiveGame && hasBoxscoreData)) {
       return;
     }
 
     let cancelled = false;
+    let timeoutId: number | undefined;
 
     const loadDetails = async () => {
       setLoadingDetails(true);
@@ -122,6 +132,7 @@ export function BoxScoreDashboard() {
                 ...existingGame.teamColors,
                 ...details.teamColors,
               },
+              statusState: details.statusState ?? existingGame.statusState,
               statusText: details.statusText ?? existingGame.statusText,
             };
           }),
@@ -139,16 +150,35 @@ export function BoxScoreDashboard() {
       } finally {
         if (!cancelled) {
           setLoadingDetails(false);
+          setDetailsFetchedAtByGame((current) => ({
+            ...current,
+            [game.id]: Date.now(),
+          }));
         }
       }
     };
 
-    void loadDetails();
+    if (!isLiveGame && lastDetailsFetchAt > 0) {
+      return;
+    }
+
+    if (isLiveGame && lastDetailsFetchAt > 0) {
+      const elapsed = Date.now() - lastDetailsFetchAt;
+      const waitMs = Math.max(LIVE_REFRESH_INTERVAL_MS - elapsed, 0);
+      timeoutId = window.setTimeout(() => {
+        void loadDetails();
+      }, waitMs);
+    } else {
+      void loadDetails();
+    }
 
     return () => {
       cancelled = true;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
     };
-  }, [game, hasBoxscoreData]);
+  }, [game, hasBoxscoreData, isPregame, isLiveGame, lastDetailsFetchAt]);
 
   const players = useMemo(() => {
     if (!game) {
@@ -177,6 +207,7 @@ export function BoxScoreDashboard() {
     setSortCol("pts");
     setSortDir(-1);
     setAnimKey((key) => key + 1);
+    setApiError(null);
   };
 
   const handleTeamSwitch = (team: TeamCode) => {
@@ -198,11 +229,20 @@ export function BoxScoreDashboard() {
     setSortDir(-1);
   };
 
+  const scheduleMessage =
+    isPregame && game.statusText
+      ? `${game.statusText} - box score will appear at tip-off.`
+      : isPregame
+        ? "Game has not started yet. Box score will appear at tip-off."
+        : isLiveGame && !hasBoxscoreData
+          ? "Live game in progress. Box score is populating."
+          : null;
+
   const statusMessage = loadingGames
     ? "Loading live NBA games..."
     : loadingDetails
       ? "Loading live box score..."
-      : apiError;
+      : apiError ?? scheduleMessage;
 
   return (
     <div
