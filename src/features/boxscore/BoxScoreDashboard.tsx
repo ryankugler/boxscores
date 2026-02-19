@@ -27,7 +27,7 @@ export function BoxScoreDashboard() {
   const [sortCol, setSortCol] = useState<SortableStatKey>("pts");
   const [sortDir, setSortDir] = useState<SortDirection>(-1);
   const [animKey, setAnimKey] = useState(0);
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
   const [loadingGames, setLoadingGames] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);

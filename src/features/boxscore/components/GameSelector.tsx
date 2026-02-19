@@ -23,6 +23,7 @@ export function GameSelector({
 }: GameSelectorProps) {
   return (
     <div
+      className="scrollbar-hidden"
       style={{
         display: "flex",
         overflowX: "auto",
