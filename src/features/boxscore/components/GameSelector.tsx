@@ -93,7 +93,15 @@ export function GameSelector({
   const renderGameButtons = (list: Game[]) =>
     list.map((game) => {
       const isSelected = game.id === selectedGameId;
+      const isLive = game.statusState === "in";
       const isPregame = game.statusState === "pre";
+      const isPostgame = game.statusState === "post";
+      const rawStatusText = game.statusText?.trim();
+      const sanitizedStatusText =
+        isLive && rawStatusText && /final/i.test(rawStatusText) ? null : rawStatusText;
+      const statusLabel = isLive
+        ? sanitizedStatusText ?? "In Progress"
+        : sanitizedStatusText ?? (isPostgame ? "Final" : game.date);
       const homeScore = game.score[game.home] ?? 0;
       const awayScore = game.score[game.away] ?? 0;
       const winner =
@@ -124,9 +132,19 @@ export function GameSelector({
               textTransform: "uppercase",
               marginBottom: "10px",
               fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "8px",
             }}
           >
-            {game.statusText ?? game.date}
+            <span>{statusLabel}</span>
+            {isLive && (
+              <span className="game-live-indicator">
+                <span className="game-live-dot" />
+                Live
+              </span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "5px" }}>

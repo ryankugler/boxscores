@@ -28,3 +28,38 @@ body {
   height: 0;
   display: none;
 }
+
+.game-live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #ff3b30;
+  letter-spacing: 1px;
+  font-weight: 800;
+}
+
+.game-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #ff3b30;
+  animation: game-live-pulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.55);
+}
+
+@keyframes game-live-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.55);
+  }
+
+  70% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 6px rgba(255, 59, 48, 0);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
+  }
+}
