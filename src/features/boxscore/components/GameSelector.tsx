@@ -1,4 +1,10 @@
-import type { CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MutableRefObject,
+} from "react";
 
 import { getAccent } from "../data/constants";
 import type { Game, Theme } from "../types";
@@ -13,6 +19,31 @@ interface GameSelectorProps {
   onSelectGame: (game: Game) => void;
 }
 
+interface ScrollControls {
+  canScrollLeft: boolean;
+  canScrollRight: boolean;
+}
+
+const DEFAULT_SCROLL_CONTROLS: ScrollControls = {
+  canScrollLeft: false,
+  canScrollRight: false,
+};
+
+const SCROLL_STEP_PX = 320;
+
+function getScrollControls(node: HTMLDivElement | null): ScrollControls {
+  if (!node) {
+    return DEFAULT_SCROLL_CONTROLS;
+  }
+
+  const maxScrollLeft = node.scrollWidth - node.clientWidth;
+
+  return {
+    canScrollLeft: node.scrollLeft > 1,
+    canScrollRight: node.scrollLeft < maxScrollLeft - 1,
+  };
+}
+
 export function GameSelector({
   games,
   selectedGameId,
@@ -24,6 +55,40 @@ export function GameSelector({
   const upcomingGames = games.filter((game) => game.statusState === "pre");
   const primaryGames = games.filter((game) => game.statusState !== "pre");
   const visiblePrimaryGames = primaryGames.length > 0 ? primaryGames : games;
+
+  const primaryRowRef = useRef<HTMLDivElement | null>(null);
+  const upcomingRowRef = useRef<HTMLDivElement | null>(null);
+  const [primaryControls, setPrimaryControls] = useState<ScrollControls>(
+    DEFAULT_SCROLL_CONTROLS,
+  );
+  const [upcomingControls, setUpcomingControls] = useState<ScrollControls>(
+    DEFAULT_SCROLL_CONTROLS,
+  );
+
+  useEffect(() => {
+    const syncControls = () => {
+      setPrimaryControls(getScrollControls(primaryRowRef.current));
+      setUpcomingControls(getScrollControls(upcomingRowRef.current));
+    };
+
+    syncControls();
+    window.addEventListener("resize", syncControls);
+
+    return () => {
+      window.removeEventListener("resize", syncControls);
+    };
+  }, [visiblePrimaryGames.length, upcomingGames.length]);
+
+  const scrollRowBy = (row: HTMLDivElement | null, direction: 1 | -1) => {
+    if (!row) {
+      return;
+    }
+
+    row.scrollBy({
+      left: direction * SCROLL_STEP_PX,
+      behavior: "smooth",
+    });
+  };
 
   const renderGameButtons = (list: Game[]) =>
     list.map((game) => {
@@ -132,19 +197,91 @@ export function GameSelector({
       );
     });
 
-  return (
-    <div style={{ borderBottom: `1px solid ${theme.border}`, background: theme.pageBg, ...transitionStyle }}>
+  const renderScrollableRow = (
+    list: Game[],
+    rowRef: MutableRefObject<HTMLDivElement | null>,
+    controls: ScrollControls,
+    setControls: (next: ScrollControls) => void,
+  ) => (
+    <div style={{ position: "relative" }}>
+      <button
+        aria-label="Scroll games left"
+        onClick={() => scrollRowBy(rowRef.current, -1)}
+        disabled={!controls.canScrollLeft}
+        style={{
+          position: "absolute",
+          left: "8px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          width: "24px",
+          height: "24px",
+          borderRadius: "999px",
+          border: `1px solid ${theme.border}`,
+          background: theme.cardBg,
+          color: theme.textPrimary,
+          cursor: controls.canScrollLeft ? "pointer" : "default",
+          opacity: controls.canScrollLeft ? 0.9 : 0.3,
+          zIndex: 2,
+          padding: 0,
+          lineHeight: 1,
+          fontSize: "15px",
+        }}
+      >
+        ‹
+      </button>
+
       <div
+        ref={rowRef}
         className="scrollbar-hidden"
+        onScroll={() => setControls(getScrollControls(rowRef.current))}
         style={{
           display: "flex",
           overflowX: "auto",
           overflowY: "hidden",
           whiteSpace: "nowrap",
+          padding: "0 36px",
+          scrollBehavior: "smooth",
         }}
       >
-        {renderGameButtons(visiblePrimaryGames)}
+        {renderGameButtons(list)}
       </div>
+
+      <button
+        aria-label="Scroll games right"
+        onClick={() => scrollRowBy(rowRef.current, 1)}
+        disabled={!controls.canScrollRight}
+        style={{
+          position: "absolute",
+          right: "8px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          width: "24px",
+          height: "24px",
+          borderRadius: "999px",
+          border: `1px solid ${theme.border}`,
+          background: theme.cardBg,
+          color: theme.textPrimary,
+          cursor: controls.canScrollRight ? "pointer" : "default",
+          opacity: controls.canScrollRight ? 0.9 : 0.3,
+          zIndex: 2,
+          padding: 0,
+          lineHeight: 1,
+          fontSize: "15px",
+        }}
+      >
+        ›
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ borderBottom: `1px solid ${theme.border}`, background: theme.pageBg, ...transitionStyle }}>
+      {renderScrollableRow(
+        visiblePrimaryGames,
+        primaryRowRef,
+        primaryControls,
+        setPrimaryControls,
+      )}
 
       {upcomingGames.length > 0 && (
         <div
@@ -164,17 +301,12 @@ export function GameSelector({
           >
             Upcoming Games
           </div>
-          <div
-            className="scrollbar-hidden"
-            style={{
-              display: "flex",
-              overflowX: "auto",
-              overflowY: "hidden",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {renderGameButtons(upcomingGames)}
-          </div>
+          {renderScrollableRow(
+            upcomingGames,
+            upcomingRowRef,
+            upcomingControls,
+            setUpcomingControls,
+          )}
         </div>
       )}
     </div>
