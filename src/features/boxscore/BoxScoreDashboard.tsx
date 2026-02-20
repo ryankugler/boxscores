@@ -53,9 +53,11 @@ export function BoxScoreDashboard() {
           return;
         }
 
+        const preferredGame = apiGames.find((item) => item.statusState !== "pre") ?? apiGames[0];
+
         setGames(apiGames);
-        setSelectedGameId(apiGames[0].id);
-        setActiveTeam(apiGames[0].home);
+        setSelectedGameId(preferredGame.id);
+        setActiveTeam(preferredGame.home);
         setSortCol("pts");
         setSortDir(-1);
         setAnimKey((key) => key + 1);
