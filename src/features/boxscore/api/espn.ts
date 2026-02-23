@@ -2,6 +2,7 @@ import { normalizeTeamCode } from "../data/constants";
 import type { Game, PlayerStats, Quarter, TeamCode, TeamColors } from "../types";
 
 const ESPN_NBA_API_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
+const ESPN_PLAYER_HEADSHOT_BASE = "https://a.espncdn.com/i/headshots/nba/players/full";
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -67,7 +68,11 @@ interface EspnBoxscoreStatBlock {
 
 interface EspnAthleteStats {
   athlete?: {
+    id?: string;
     displayName?: string;
+    headshot?: {
+      href?: string;
+    };
     position?: {
       abbreviation?: string;
     };
@@ -351,6 +356,8 @@ function parseTeamPlayerBlock(statBlocks: EspnBoxscoreStatBlock[]): PlayerStats[
       const [ftm, fta] = parseMadeAttempt(stats[indexes.ft]);
 
       players.push({
+        athleteId: entry.athlete?.id,
+        photoUrl: getEspnHeadshotUrl(entry.athlete?.id, entry.athlete?.headshot?.href),
         name,
         pos: entry.athlete?.position?.abbreviation ?? "",
         fgm,
@@ -407,6 +414,20 @@ function parseMadeAttempt(raw: string | undefined): [number, number] {
 function parseNumberStat(raw: string | undefined): number {
   const value = Number.parseInt(raw ?? "0", 10);
   return Number.isNaN(value) ? 0 : value;
+}
+
+function getEspnHeadshotUrl(athleteId?: string, providedUrl?: string): string | undefined {
+  const cleanedUrl = providedUrl?.trim();
+  if (cleanedUrl) {
+    return cleanedUrl;
+  }
+
+  const cleanedId = athleteId?.trim();
+  if (!cleanedId || !/^\d+$/.test(cleanedId)) {
+    return undefined;
+  }
+
+  return `${ESPN_PLAYER_HEADSHOT_BASE}/${cleanedId}.png`;
 }
 
 function normalizeHexColor(value?: string): string | undefined {
