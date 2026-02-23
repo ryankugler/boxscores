@@ -54,6 +54,8 @@ export type StatColumn =
 export type SortDirection = 1 | -1;
 
 export interface PlayerStats {
+  athleteId?: string;
+  photoUrl?: string;
   name: string;
   pos: string;
   fgm: number;
@@ -68,6 +70,21 @@ export interface PlayerStats {
   stl: number;
   blk: number;
   to: number;
+}
+
+export interface TopPerformer {
+  athleteId?: string;
+  photoUrl?: string;
+  name: string;
+  pos: string;
+  team: TeamCode;
+  gameId: string;
+  pts: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  total: number;
 }
 
 export interface Game {

@@ -6,9 +6,10 @@ import { Header } from "./components/Header";
 import { PlayerStatsTable } from "./components/PlayerStatsTable";
 import { QuarterBreakdown } from "./components/QuarterBreakdown";
 import { TeamTabs } from "./components/TeamTabs";
+import { TopPerformersLeaderboard } from "./components/TopPerformersLeaderboard";
 import { getAccent } from "./data/constants";
 import { GAMES } from "./data/games";
-import { COL_KEY, sortPlayers } from "./stats";
+import { COL_KEY, getTopPerformersForDate, sortPlayers } from "./stats";
 import { mkTheme, TRANSITION_STYLE } from "./theme";
 import type {
   Game,
@@ -19,6 +20,37 @@ import type {
 } from "./types";
 
 const LIVE_REFRESH_INTERVAL_MS = 30_000;
+const TOP_PERFORMERS_LIMIT = 5;
+type GameDetailsPayload = Awaited<ReturnType<typeof fetchGameDetails>>;
+
+function gameHasBoxscoreData(game: Game): boolean {
+  return (
+    (game.players[game.home]?.length ?? 0) > 0 &&
+    (game.players[game.away]?.length ?? 0) > 0
+  );
+}
+
+function mergeGameWithDetails(game: Game, details: GameDetailsPayload): Game {
+  return {
+    ...game,
+    score: details.score,
+    periods: details.periods,
+    players: {
+      ...game.players,
+      ...details.players,
+    },
+    teamLogos: {
+      ...game.teamLogos,
+      ...details.teamLogos,
+    },
+    teamColors: {
+      ...game.teamColors,
+      ...details.teamColors,
+    },
+    statusState: details.statusState ?? game.statusState,
+    statusText: details.statusText ?? game.statusText,
+  };
+}
 
 export function BoxScoreDashboard() {
   const [games, setGames] = useState<Game[]>(GAMES);
@@ -28,8 +60,10 @@ export function BoxScoreDashboard() {
   const [sortDir, setSortDir] = useState<SortDirection>(-1);
   const [animKey, setAnimKey] = useState(0);
   const [dark, setDark] = useState(false);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [loadingGames, setLoadingGames] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [loadingDateDetails, setLoadingDateDetails] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [detailsFetchedAtByGame, setDetailsFetchedAtByGame] = useState<
     Record<string, number>
@@ -85,10 +119,7 @@ export function BoxScoreDashboard() {
       return false;
     }
 
-    return (
-      (game.players[game.home]?.length ?? 0) > 0 ||
-      (game.players[game.away]?.length ?? 0) > 0
-    );
+    return gameHasBoxscoreData(game);
   }, [game]);
 
   const isPregame = game?.statusState === "pre";
@@ -118,25 +149,7 @@ export function BoxScoreDashboard() {
               return existingGame;
             }
 
-            return {
-              ...existingGame,
-              score: details.score,
-              periods: details.periods,
-              players: {
-                ...existingGame.players,
-                ...details.players,
-              },
-              teamLogos: {
-                ...existingGame.teamLogos,
-                ...details.teamLogos,
-              },
-              teamColors: {
-                ...existingGame.teamColors,
-                ...details.teamColors,
-              },
-              statusState: details.statusState ?? existingGame.statusState,
-              statusText: details.statusText ?? existingGame.statusText,
-            };
+            return mergeGameWithDetails(existingGame, details);
           }),
         );
         setApiError(null);
@@ -182,6 +195,90 @@ export function BoxScoreDashboard() {
     };
   }, [game, hasBoxscoreData, isPregame, isLiveGame, lastDetailsFetchAt]);
 
+  useEffect(() => {
+    if (!game) {
+      return;
+    }
+
+    const sameDateGames = games.filter(
+      (candidate) =>
+        candidate.date === game.date &&
+        candidate.id !== game.id &&
+        candidate.statusState !== "pre",
+    );
+    const missingGames = sameDateGames.filter((candidate) => {
+      const wasFetched = (detailsFetchedAtByGame[candidate.id] ?? 0) > 0;
+      return !wasFetched && !gameHasBoxscoreData(candidate);
+    });
+
+    if (missingGames.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const requestedAt = Date.now();
+
+    setDetailsFetchedAtByGame((current) => {
+      const next = { ...current };
+
+      missingGames.forEach((candidate) => {
+        if (!next[candidate.id]) {
+          next[candidate.id] = requestedAt;
+        }
+      });
+
+      return next;
+    });
+
+    const loadDateDetails = async () => {
+      setLoadingDateDetails(true);
+
+      try {
+        const results = await Promise.all(
+          missingGames.map(async (candidate) => {
+            try {
+              const details = await fetchGameDetails(candidate.id);
+              return { id: candidate.id, details };
+            } catch {
+              return null;
+            }
+          }),
+        );
+        if (cancelled) {
+          return;
+        }
+
+        const detailsByGame = new Map(
+          results
+            .filter(
+              (result): result is { id: string; details: GameDetailsPayload } =>
+                result !== null,
+            )
+            .map((result) => [result.id, result.details]),
+        );
+
+        if (detailsByGame.size > 0) {
+          setGames((currentGames) =>
+            currentGames.map((existingGame) => {
+              const details = detailsByGame.get(existingGame.id);
+              return details ? mergeGameWithDetails(existingGame, details) : existingGame;
+            }),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingDateDetails(false);
+        }
+      }
+    };
+
+    void loadDateDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailsFetchedAtByGame, game, games]);
+
   const players = useMemo(() => {
     if (!game) {
       return [];
@@ -192,6 +289,10 @@ export function BoxScoreDashboard() {
   const sortedPlayers = useMemo(
     () => sortPlayers(players, sortCol, sortDir),
     [players, sortCol, sortDir],
+  );
+  const topPerformers = useMemo(
+    () => getTopPerformersForDate(games, game?.date ?? "", TOP_PERFORMERS_LIMIT),
+    [game?.date, games],
   );
 
   if (!game) {
@@ -245,6 +346,7 @@ export function BoxScoreDashboard() {
     : loadingDetails
       ? "Loading live box score..."
       : apiError ?? scheduleMessage;
+  const leaderboardIsLoading = loadingGames || loadingDetails || loadingDateDetails;
 
   return (
     <div
@@ -322,7 +424,116 @@ export function BoxScoreDashboard() {
           transitionStyle={TRANSITION_STYLE}
           onSort={handleSort}
         />
+
       </div>
+
+      <button
+        onClick={() => setIsLeaderboardOpen(true)}
+        style={{
+          position: "fixed",
+          right: "20px",
+          bottom: "20px",
+          border: "none",
+          borderRadius: "999px",
+          padding: "10px 14px",
+          background: "#e8401a",
+          color: "#fff",
+          fontWeight: 800,
+          fontSize: "12px",
+          letterSpacing: "1px",
+          textTransform: "uppercase",
+          cursor: "pointer",
+          zIndex: 20,
+          boxShadow: dark ? "0 8px 24px rgba(0, 0, 0, 0.45)" : "0 8px 24px rgba(0, 0, 0, 0.2)",
+        }}
+      >
+        Top {TOP_PERFORMERS_LIMIT}
+      </button>
+
+      {isLeaderboardOpen && (
+        <button
+          aria-label="Close leaderboard panel"
+          onClick={() => setIsLeaderboardOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            border: "none",
+            background: "rgba(0, 0, 0, 0.4)",
+            zIndex: 29,
+            padding: 0,
+            cursor: "pointer",
+          }}
+        />
+      )}
+
+      <aside
+        aria-hidden={!isLeaderboardOpen}
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          width: "min(520px, 100vw)",
+          height: "100vh",
+          background: theme.pageBg,
+          borderLeft: `1px solid ${theme.border}`,
+          transform: isLeaderboardOpen ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 0.2s ease-out",
+          zIndex: 30,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "12px 14px",
+            borderBottom: `1px solid ${theme.border}`,
+            background: theme.headerBg,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "13px",
+              fontWeight: 800,
+              letterSpacing: "1px",
+              textTransform: "uppercase",
+            }}
+          >
+            Daily Leaderboard
+          </div>
+          <button
+            aria-label="Close leaderboard panel"
+            onClick={() => setIsLeaderboardOpen(false)}
+            style={{
+              border: `1px solid ${theme.border}`,
+              background: theme.cardBg,
+              color: theme.textPrimary,
+              borderRadius: "4px",
+              padding: "4px 8px",
+              fontSize: "12px",
+              fontWeight: 700,
+              letterSpacing: "0.5px",
+              cursor: "pointer",
+            }}
+          >
+            Close
+          </button>
+        </div>
+        <div style={{ overflow: "auto" }}>
+          <TopPerformersLeaderboard
+            limit={TOP_PERFORMERS_LIMIT}
+            dateLabel={game.date}
+            performers={topPerformers}
+            isLoading={leaderboardIsLoading}
+            theme={theme}
+            transitionStyle={TRANSITION_STYLE}
+          />
+        </div>
+      </aside>
     </div>
   );
 }
