@@ -67,7 +67,8 @@ export function GameSelector({
   const [primaryControls, setPrimaryControls] = useState<ScrollControls>(
     DEFAULT_SCROLL_CONTROLS,
   );
-  const [upcomingControls, setUpcomingControls] = useState<ScrollControls>(
+  //add upcomingControls here if you want to enable scrolling for upcoming games, but currently we are hiding that section so it's not necessary
+  const [setUpcomingControls] = useState<ScrollControls>(
     DEFAULT_SCROLL_CONTROLS,
   );
 
