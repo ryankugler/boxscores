@@ -108,6 +108,25 @@ export interface TeamColors {
   light: string;
 }
 
+export interface ConferenceStandingRow {
+  team: TeamCode;
+  teamName: string;
+  wins: number;
+  losses: number;
+  winPct: string;
+  gamesBack: string;
+  streak: string;
+  lastTen: string;
+  conferenceRank?: number;
+  playoffSeed?: number;
+  logo?: string;
+}
+
+export interface ConferenceStandings {
+  eastern: ConferenceStandingRow[];
+  western: ConferenceStandingRow[];
+}
+
 export interface Theme {
   pageBg: string;
   headerBg: string;

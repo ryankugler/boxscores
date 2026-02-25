@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchGameDetails, fetchScoreboardGames } from "./api/espn";
+import {
+  fetchConferenceStandings,
+  fetchGameDetails,
+  fetchScoreboardGames,
+} from "./api/espn";
+import NBAPlayoffBracket from "../playoffBracket/NBAPlayoffBracket";
+import { ConferenceStandings } from "./components/ConferenceStandings";
 import { GameSelector } from "./components/GameSelector";
-import { Header } from "./components/Header";
+import { Header, type TopNavTab } from "./components/Header";
 import { PlayerStatsTable } from "./components/PlayerStatsTable";
 import { QuarterBreakdown } from "./components/QuarterBreakdown";
 import { TeamTabs } from "./components/TeamTabs";
@@ -13,6 +19,7 @@ import { mkTheme, TRANSITION_STYLE } from "./theme";
 import { TopPerformersLeaderboard } from "./components/TopPerformersLeaderboard";
 
 import type {
+  ConferenceStandings as ConferenceStandingsData,
   Game,
   SortDirection,
   SortableStatKey,
@@ -23,6 +30,9 @@ import type {
 const LIVE_REFRESH_INTERVAL_MS = 30_000;
 const TOP_PERFORMERS_LIMIT = 5;
 const TODAY_TAB = "Today";
+const VIEW_TAB_BOXSCORES: TopNavTab = "boxscores";
+const VIEW_TAB_STANDINGS: TopNavTab = "standings";
+const VIEW_TAB_PLAYOFFS: TopNavTab = "playoffs";
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -78,6 +88,7 @@ function mergeGameWithDetails(game: Game, details: GameDetailsPayload): Game {
 
 export function BoxScoreDashboard() {
   const [games, setGames] = useState<Game[]>(GAMES);
+  const [activeViewTab, setActiveViewTab] = useState<TopNavTab>(VIEW_TAB_BOXSCORES);
   const [selectedDateTab, setSelectedDateTab] = useState<string>(TODAY_TAB);
   const [selectedGameId, setSelectedGameId] = useState<string>(GAMES[0]?.id ?? "");
   const [activeTeam, setActiveTeam] = useState<TeamCode>(GAMES[0]?.home ?? "LAL");
@@ -91,6 +102,12 @@ export function BoxScoreDashboard() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [loadingDateDetails, setLoadingDateDetails] = useState(false);
+  const [conferenceStandings, setConferenceStandings] = useState<ConferenceStandingsData>({
+    eastern: [],
+    western: [],
+  });
+  const [loadingStandings, setLoadingStandings] = useState(false);
+  const [standingsError, setStandingsError] = useState<string | null>(null);
   const [detailsFetchedAtByGame, setDetailsFetchedAtByGame] = useState<
     Record<string, number>
   >({});
@@ -184,6 +201,41 @@ export function BoxScoreDashboard() {
       cancelled = true;
     };
   }, [todayLabel]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadStandings = async () => {
+      setLoadingStandings(true);
+      try {
+        const standings = await fetchConferenceStandings();
+        if (cancelled) {
+          return;
+        }
+
+        setConferenceStandings(standings);
+        if (standings.eastern.length === 0 && standings.western.length === 0) {
+          setStandingsError("No standings data available right now.");
+        } else {
+          setStandingsError(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setStandingsError("Could not load conference standings from the API.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingStandings(false);
+        }
+      }
+    };
+
+    void loadStandings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (availableDateTabs.length === 0) {
@@ -392,6 +444,12 @@ export function BoxScoreDashboard() {
   };
 }, [game, games, detailsFetchedAtByGame, detailsLoadingByGame]);
 
+  useEffect(() => {
+    if (activeViewTab !== VIEW_TAB_BOXSCORES && isLeaderboardOpen) {
+      setIsLeaderboardOpen(false);
+    }
+  }, [activeViewTab, isLeaderboardOpen]);
+
   const players = useMemo(() => {
     if (!game) {
       return [];
@@ -507,150 +565,181 @@ export function BoxScoreDashboard() {
       />
 
       <Header
+        activeTab={activeViewTab}
         dark={dark}
+        onSelectTab={setActiveViewTab}
         onToggleTheme={() => setDark((value) => !value)}
         theme={theme}
         transitionStyle={TRANSITION_STYLE}
       />
 
-      {availableDateTabs.length > 0 && (
-        <GameSelector
-          games={gamesForSelectedDate}
-          availableDates={availableDateTabs}
-          selectedDate={selectedDateTab}
-          showUpcomingGames={selectedDateTab === TODAY_TAB}
-          selectedGameId={game?.id ?? ""}
-          dark={dark}
-          theme={theme}
-          transitionStyle={TRANSITION_STYLE}
-          onSelectDate={handleDateSelect}
-          onSelectGame={handleGameSelect}
-        />
-      )}
-
       <div style={{ padding: "0 28px 40px" }}>
-        {availableDateTabs.length === 0 && (
-          <div
-            style={{
-              padding: "12px 0",
-              fontSize: "12px",
-              letterSpacing: "0.6px",
-              color: theme.textMuted,
-              textTransform: "uppercase",
-              fontWeight: 600,
-            }}
-          >
-            No completed games found in the current range.
-          </div>
-        )}
-
-        {statusMessage && (
-          <div
-            style={{
-              padding: "10px 0",
-              fontSize: "12px",
-              letterSpacing: "0.6px",
-              color: theme.textMuted,
-              textTransform: "uppercase",
-              fontWeight: 600,
-            }}
-          >
-            {statusMessage}
-          </div>
-        )}
-
-        {game && (
+        {activeViewTab === VIEW_TAB_BOXSCORES && (
           <>
-            <QuarterBreakdown
-              game={game}
-              winTeam={winTeam}
-              dark={dark}
-              theme={theme}
-              transitionStyle={TRANSITION_STYLE}
-            />
+            {availableDateTabs.length > 0 && (
+              <GameSelector
+                games={gamesForSelectedDate}
+                availableDates={availableDateTabs}
+                selectedDate={selectedDateTab}
+                showUpcomingGames={selectedDateTab === TODAY_TAB}
+                selectedGameId={game?.id ?? ""}
+                dark={dark}
+                theme={theme}
+                transitionStyle={TRANSITION_STYLE}
+                onSelectDate={handleDateSelect}
+                onSelectGame={handleGameSelect}
+              />
+            )}
 
-            <TeamTabs
-              game={game}
-              activeTeam={activeTeam}
-              dark={dark}
-              theme={theme}
-              transitionStyle={TRANSITION_STYLE}
-              onSwitchTeam={handleTeamSwitch}
-            />
+            {availableDateTabs.length === 0 && (
+              <div
+                style={{
+                  padding: "12px 0",
+                  fontSize: "12px",
+                  letterSpacing: "0.6px",
+                  color: theme.textMuted,
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                No completed games found in the current range.
+              </div>
+            )}
 
-            <PlayerStatsTable
-              gameId={game.id}
-              activeTeam={activeTeam}
-              animKey={animKey}
-              sortedPlayers={sortedPlayers}
-              sortCol={sortCol}
-              sortDir={sortDir}
-              accent={accent}
-              theme={theme}
-              transitionStyle={TRANSITION_STYLE}
-              onSort={handleSort}
-            />
+            {statusMessage && (
+              <div
+                style={{
+                  padding: "10px 0",
+                  fontSize: "12px",
+                  letterSpacing: "0.6px",
+                  color: theme.textMuted,
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                {statusMessage}
+              </div>
+            )}
+
+            {game && (
+              <>
+                <QuarterBreakdown
+                  game={game}
+                  winTeam={winTeam}
+                  dark={dark}
+                  theme={theme}
+                  transitionStyle={TRANSITION_STYLE}
+                />
+
+                <TeamTabs
+                  game={game}
+                  activeTeam={activeTeam}
+                  dark={dark}
+                  theme={theme}
+                  transitionStyle={TRANSITION_STYLE}
+                  onSwitchTeam={handleTeamSwitch}
+                />
+
+                <PlayerStatsTable
+                  gameId={game.id}
+                  activeTeam={activeTeam}
+                  animKey={animKey}
+                  sortedPlayers={sortedPlayers}
+                  sortCol={sortCol}
+                  sortDir={sortDir}
+                  accent={accent}
+                  theme={theme}
+                  transitionStyle={TRANSITION_STYLE}
+                  onSort={handleSort}
+                />
+              </>
+            )}
           </>
         )}
 
+        {activeViewTab === VIEW_TAB_STANDINGS && (
+          <ConferenceStandings
+            eastern={conferenceStandings.eastern}
+            western={conferenceStandings.western}
+            loading={loadingStandings}
+            error={standingsError}
+            theme={theme}
+            transitionStyle={TRANSITION_STYLE}
+          />
+        )}
+
+        {activeViewTab === VIEW_TAB_PLAYOFFS && (
+          <NBAPlayoffBracket
+            dark={dark}
+            theme={theme}
+            transitionStyle={TRANSITION_STYLE}
+            standings={conferenceStandings}
+            loading={loadingStandings}
+            error={standingsError}
+          />
+        )}
       </div>
-      <button
-        onClick={() => setIsLeaderboardOpen(true)}
-        style={{
-          position: "fixed",
-          right: "20px",
-          bottom: "20px",
-          border: "none",
-          borderRadius: "999px",
-          padding: "10px 14px",
-          background: "#e8401a",
-          color: "#fff",
-          fontWeight: 800,
-          fontSize: "12px",
-          letterSpacing: "1px",
-          textTransform: "uppercase",
-          cursor: "pointer",
-          zIndex: 20,
-          boxShadow: dark ? "0 8px 24px rgba(0, 0, 0, 0.45)" : "0 8px 24px rgba(0, 0, 0, 0.2)",
-        }}
-      >
-        Top {TOP_PERFORMERS_LIMIT}
-      </button>
+      {activeViewTab === VIEW_TAB_BOXSCORES && (
+        <>
+          <button
+            onClick={() => setIsLeaderboardOpen(true)}
+            style={{
+              position: "fixed",
+              right: "20px",
+              bottom: "20px",
+              border: "none",
+              borderRadius: "999px",
+              padding: "10px 14px",
+              background: "#e8401a",
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: "12px",
+              letterSpacing: "1px",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              zIndex: 20,
+              boxShadow: dark
+                ? "0 8px 24px rgba(0, 0, 0, 0.45)"
+                : "0 8px 24px rgba(0, 0, 0, 0.2)",
+            }}
+          >
+            Top {TOP_PERFORMERS_LIMIT}
+          </button>
 
-      {isLeaderboardOpen && (
-        <button
-          aria-label="Close leaderboard panel"
-          onClick={() => setIsLeaderboardOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            border: "none",
-            background: "rgba(0, 0, 0, 0.4)",
-            zIndex: 29,
-            padding: 0,
-            cursor: "pointer",
-          }}
-        />
-      )}
+          {isLeaderboardOpen && (
+            <button
+              aria-label="Close leaderboard panel"
+              onClick={() => setIsLeaderboardOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                border: "none",
+                background: "rgba(0, 0, 0, 0.4)",
+                zIndex: 29,
+                padding: 0,
+                cursor: "pointer",
+              }}
+            />
+          )}
 
-      <aside
-        aria-hidden={!isLeaderboardOpen}
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          width: "min(520px, 100vw)",
-          height: "100vh",
-          background: theme.pageBg,
-          borderLeft: `1px solid ${theme.border}`,
-          transform: isLeaderboardOpen ? "translateX(0)" : "translateX(100%)",
-          transition: "transform 0.2s ease-out",
-          zIndex: 30,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
+          <aside
+            aria-hidden={!isLeaderboardOpen}
+            style={{
+              position: "fixed",
+              top: 0,
+              right: 0,
+              width: "min(520px, 100vw)",
+              height: "100vh",
+              background: theme.pageBg,
+              borderLeft: `1px solid ${theme.border}`,
+              transform: isLeaderboardOpen ? "translateX(0)" : "translateX(100%)",
+              transition: "transform 0.2s ease-out",
+              zIndex: 30,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
         <div
           style={{
             padding: "12px 14px",
@@ -700,7 +789,9 @@ export function BoxScoreDashboard() {
             transitionStyle={TRANSITION_STYLE}
           />
         </div>
-      </aside>
+          </aside>
+        </>
+      )}
     </div>
   );
 }

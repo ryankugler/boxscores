@@ -1,7 +1,16 @@
 import { normalizeTeamCode } from "../data/constants";
-import type { Game, PlayerStats, Quarter, TeamCode, TeamColors } from "../types";
+import type {
+  ConferenceStandingRow,
+  ConferenceStandings,
+  Game,
+  PlayerStats,
+  Quarter,
+  TeamCode,
+  TeamColors,
+} from "../types";
 
 const ESPN_NBA_API_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
+const ESPN_CORE_API_BASE = "https://site.api.espn.com/apis/v2/sports/basketball/nba";
 const ESPN_PLAYER_HEADSHOT_BASE = "https://a.espncdn.com/i/headshots/nba/players/full";
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -21,6 +30,36 @@ interface EspnSummaryResponse {
   boxscore?: {
     players?: EspnBoxscoreTeam[];
   };
+}
+
+interface EspnStandingsResponse {
+  children?: EspnStandingsGroup[];
+  standings?: {
+    entries?: EspnStandingEntry[];
+  };
+}
+
+interface EspnStandingsGroup {
+  name?: string;
+  abbreviation?: string;
+  standings?: {
+    entries?: EspnStandingEntry[];
+  };
+}
+
+interface EspnStandingEntry {
+  team?: EspnTeam;
+  stats?: EspnStandingStat[];
+}
+
+interface EspnStandingStat {
+  name?: string;
+  displayName?: string;
+  shortDisplayName?: string;
+  description?: string;
+  abbreviation?: string;
+  displayValue?: string;
+  value?: number | string;
 }
 
 interface EspnEvent {
@@ -118,6 +157,55 @@ export async function fetchScoreboardGames(lastDays = 7): Promise<Game[]> {
     .filter((game): game is Game => game !== null);
 
   return games;
+}
+
+export async function fetchConferenceStandings(): Promise<ConferenceStandings> {
+  const url = `${ESPN_CORE_API_BASE}/standings`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Standings request failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as EspnStandingsResponse;
+  const groups = payload.children ?? [];
+  const standingsByConference: ConferenceStandings = { eastern: [], western: [] };
+
+  groups.forEach((group) => {
+    const rows = (group.standings?.entries ?? [])
+      .map(parseStandingEntry)
+      .filter((entry): entry is ConferenceStandingRow => entry !== null);
+    const normalizedGroupName = `${group.name ?? ""} ${group.abbreviation ?? ""}`.toLowerCase();
+
+    if (normalizedGroupName.includes("east")) {
+      standingsByConference.eastern = rows;
+      return;
+    }
+
+    if (normalizedGroupName.includes("west")) {
+      standingsByConference.western = rows;
+    }
+  });
+
+  if (standingsByConference.eastern.length > 0 || standingsByConference.western.length > 0) {
+    return standingsByConference;
+  }
+
+  const rootEntries = (payload.standings?.entries ?? [])
+    .map(parseStandingEntry)
+    .filter((entry): entry is ConferenceStandingRow => entry !== null);
+
+  if (rootEntries.length > 0) {
+    return splitStandingsByConference(rootEntries);
+  }
+
+  const allChildrenEntries = groups.flatMap((group) =>
+    (group.standings?.entries ?? [])
+      .map(parseStandingEntry)
+      .filter((entry): entry is ConferenceStandingRow => entry !== null),
+  );
+
+  return splitStandingsByConference(allChildrenEntries);
 }
 
 export async function fetchGameDetails(eventId: string): Promise<GameDetails> {
@@ -242,6 +330,144 @@ function parseTeamDescriptor(team: EspnTeam): TeamDescriptor {
 function parseScore(raw?: string): number {
   const value = Number.parseInt(raw ?? "0", 10);
   return Number.isNaN(value) ? 0 : value;
+}
+
+function parseStandingEntry(entry: EspnStandingEntry): ConferenceStandingRow | null {
+  const team = entry.team;
+  if (!team) {
+    return null;
+  }
+
+  const code = normalizeTeamCode(
+    team.abbreviation ?? team.shortDisplayName ?? team.displayName ?? "",
+  );
+
+  if (!code) {
+    return null;
+  }
+
+  const wins = toInt(readStandingStat(entry.stats, ["wins", "w"]));
+  const losses = toInt(readStandingStat(entry.stats, ["losses", "l"]));
+
+  return {
+    team: code,
+    teamName: team.displayName ?? team.shortDisplayName ?? String(code),
+    wins,
+    losses,
+    winPct: readStandingStat(entry.stats, ["winpercent", "winpct", "pct"], ".000"),
+    gamesBack: readStandingStat(entry.stats, ["gamesback", "gb"], "0"),
+    streak: readStandingStat(entry.stats, ["streak"], "-"),
+    lastTen: readStandingStat(entry.stats, ["lastten", "l10", "last 10"], "-"),
+    conferenceRank: readStandingInt(entry.stats, [
+      "conferencerank",
+      "conference rank",
+      "rank",
+    ]),
+    playoffSeed: readStandingInt(entry.stats, ["playoffseed", "playoff seed", "seed"]),
+    logo: team.logos?.[0]?.href ?? team.logo,
+  };
+}
+
+function readStandingStat(
+  stats: EspnStandingStat[] | undefined,
+  keys: string[],
+  fallback = "-",
+): string {
+  if (!stats || stats.length === 0) {
+    return fallback;
+  }
+
+  const match = findStandingStat(stats, keys);
+
+  if (!match) {
+    return fallback;
+  }
+
+  if (match.displayValue) {
+    return match.displayValue;
+  }
+
+  if (typeof match.value === "number") {
+    return String(match.value);
+  }
+
+  if (typeof match.value === "string" && match.value.trim().length > 0) {
+    return match.value;
+  }
+
+  return fallback;
+}
+
+function readStandingInt(
+  stats: EspnStandingStat[] | undefined,
+  keys: string[],
+): number | undefined {
+  if (!stats || stats.length === 0) {
+    return undefined;
+  }
+
+  const match = findStandingStat(stats, keys);
+  if (!match) {
+    return undefined;
+  }
+
+  const raw = match.displayValue ?? (typeof match.value === "string" ? match.value : String(match.value ?? ""));
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function findStandingStat(
+  stats: EspnStandingStat[],
+  keys: string[],
+): EspnStandingStat | undefined {
+  const normalizedKeys = keys.map(normalizeStatToken);
+
+  return stats.find((stat) => {
+    const candidates = [
+      stat.name,
+      stat.displayName,
+      stat.shortDisplayName,
+      stat.description,
+      stat.abbreviation,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .map(normalizeStatToken);
+    return candidates.some((candidate) => normalizedKeys.includes(candidate));
+  });
+}
+
+function toInt(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function normalizeStatToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function splitStandingsByConference(rows: ConferenceStandingRow[]): ConferenceStandings {
+  const EASTERN_TEAMS = new Set([
+    "ATL",
+    "BOS",
+    "BKN",
+    "CHA",
+    "CHI",
+    "CLE",
+    "DET",
+    "IND",
+    "MIA",
+    "MIL",
+    "NYK",
+    "ORL",
+    "PHI",
+    "TOR",
+    "WAS",
+  ]);
+
+  const eastern = rows.filter((row) => EASTERN_TEAMS.has(String(row.team)));
+  const western = rows.filter((row) => !EASTERN_TEAMS.has(String(row.team)));
+
+  return { eastern, western };
 }
 
 function parsePeriods(
