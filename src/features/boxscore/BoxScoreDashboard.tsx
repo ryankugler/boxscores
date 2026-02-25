@@ -518,6 +518,7 @@ export function BoxScoreDashboard() {
           games={gamesForSelectedDate}
           availableDates={availableDateTabs}
           selectedDate={selectedDateTab}
+          showUpcomingGames={selectedDateTab === TODAY_TAB}
           selectedGameId={game?.id ?? ""}
           dark={dark}
           theme={theme}

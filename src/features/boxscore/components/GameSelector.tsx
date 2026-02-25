@@ -14,6 +14,7 @@ interface GameSelectorProps {
   games: Game[];
   availableDates: string[];
   selectedDate: string;
+  showUpcomingGames: boolean;
   selectedGameId: string;
   dark: boolean;
   theme: Theme;
@@ -51,6 +52,7 @@ export function GameSelector({
   games,
   availableDates,
   selectedDate,
+  showUpcomingGames,
   selectedGameId,
   dark,
   theme,
@@ -67,8 +69,7 @@ export function GameSelector({
   const [primaryControls, setPrimaryControls] = useState<ScrollControls>(
     DEFAULT_SCROLL_CONTROLS,
   );
-  //add upcomingControls here if you want to enable scrolling for upcoming games, but currently we are hiding that section so it's not necessary
-  const [setUpcomingControls] = useState<ScrollControls>(
+  const [upcomingControls, setUpcomingControls] = useState<ScrollControls>(
     DEFAULT_SCROLL_CONTROLS,
   );
 
@@ -346,13 +347,13 @@ export function GameSelector({
         setPrimaryControls,
       )}
 
-      {upcomingGames.length > 0 && (
+      {showUpcomingGames && upcomingGames.length > 0 && (
         <div
           style={{
             borderTop: `1px solid ${theme.border}`,
           }}
         >
-          {/* <div
+          <div
             style={{
               padding: "6px 20px",
               fontSize: "10px",
@@ -369,7 +370,7 @@ export function GameSelector({
             upcomingRowRef,
             upcomingControls,
             setUpcomingControls,
-          )} */}
+          )}
         </div>
       )}
     </div>
