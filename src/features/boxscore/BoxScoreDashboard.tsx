@@ -22,13 +22,36 @@ import type {
 
 const LIVE_REFRESH_INTERVAL_MS = 30_000;
 const TOP_PERFORMERS_LIMIT = 5;
+const TODAY_TAB = "Today";
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
 type GameDetailsPayload = Awaited<ReturnType<typeof fetchGameDetails>>;
+
+function parseGameDate(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
 
 function gameHasBoxscoreData(game: Game): boolean {
   return (
     (game.players[game.home]?.length ?? 0) > 0 &&
     (game.players[game.away]?.length ?? 0) > 0
   );
+}
+
+function isCompletedGame(game: Game): boolean {
+  if (game.statusState === "post") {
+    return true;
+  }
+
+  if (game.statusState === "pre" || game.statusState === "in") {
+    return false;
+  }
+
+  return gameHasBoxscoreData(game);
 }
 
 function mergeGameWithDetails(game: Game, details: GameDetailsPayload): Game {
@@ -55,6 +78,7 @@ function mergeGameWithDetails(game: Game, details: GameDetailsPayload): Game {
 
 export function BoxScoreDashboard() {
   const [games, setGames] = useState<Game[]>(GAMES);
+  const [selectedDateTab, setSelectedDateTab] = useState<string>(TODAY_TAB);
   const [selectedGameId, setSelectedGameId] = useState<string>(GAMES[0]?.id ?? "");
   const [activeTeam, setActiveTeam] = useState<TeamCode>(GAMES[0]?.home ?? "LAL");
   const [sortCol, setSortCol] = useState<SortableStatKey>("pts");
@@ -72,10 +96,52 @@ export function BoxScoreDashboard() {
   >({});
 
   const theme = useMemo(() => mkTheme(dark), [dark]);
+  const todayLabel = useMemo(() => DATE_FORMATTER.format(new Date()), []);
+  const completedGames = useMemo(() => games.filter(isCompletedGame), [games]);
+  const availableHistoricalDates = useMemo(() => {
+    const unique = new Set(completedGames.map((item) => item.date).filter(Boolean));
+    unique.delete(todayLabel);
+    return [...unique].sort((a, b) => parseGameDate(b) - parseGameDate(a));
+  }, [completedGames, todayLabel]);
+  const availableDateTabs = useMemo(() => {
+    return [TODAY_TAB, ...availableHistoricalDates];
+  }, [availableHistoricalDates]);
+  const gamesForToday = useMemo(() => {
+    return games
+      .filter((item) => item.date === todayLabel)
+      .sort((a, b) => parseGameDate(b.date) - parseGameDate(a.date));
+  }, [games, todayLabel]);
+  const gamesForSelectedDate = useMemo(() => {
+    if (selectedDateTab === TODAY_TAB) {
+      return gamesForToday;
+    }
+
+    return completedGames
+      .filter((item) => item.date === selectedDateTab)
+      .sort((a, b) => parseGameDate(b.date) - parseGameDate(a.date));
+  }, [completedGames, gamesForToday, selectedDateTab]);
 
   const game = useMemo(() => {
-    return games.find((item) => item.id === selectedGameId) ?? games[0] ?? null;
-  }, [games, selectedGameId]);
+    return (
+      gamesForSelectedDate.find((item) => item.id === selectedGameId) ??
+      gamesForSelectedDate[0] ??
+      null
+    );
+  }, [gamesForSelectedDate, selectedGameId]);
+
+  useEffect(() => {
+    if (!game) {
+      return;
+    }
+
+    if (game.id !== selectedGameId) {
+      setSelectedGameId(game.id);
+      setActiveTeam(game.home);
+      setSortCol("pts");
+      setSortDir(-1);
+      setAnimKey((key) => key + 1);
+    }
+  }, [game, selectedGameId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,10 +156,13 @@ export function BoxScoreDashboard() {
         }
 
         const preferredGame = apiGames.find((item) => item.statusState !== "pre") ?? apiGames[0];
+        const todayGame = apiGames.find((item) => item.date === todayLabel);
+        const initialGame = todayGame ?? preferredGame;
 
         setGames(apiGames);
-        setSelectedGameId(preferredGame.id);
-        setActiveTeam(preferredGame.home);
+        setSelectedDateTab(todayGame ? TODAY_TAB : initialGame.date);
+        setSelectedGameId(initialGame.id);
+        setActiveTeam(initialGame.home);
         setSortCol("pts");
         setSortDir(-1);
         setAnimKey((key) => key + 1);
@@ -114,7 +183,17 @@ export function BoxScoreDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [todayLabel]);
+
+  useEffect(() => {
+    if (availableDateTabs.length === 0) {
+      return;
+    }
+
+    if (!availableDateTabs.includes(selectedDateTab)) {
+      setSelectedDateTab(availableDateTabs[0]);
+    }
+  }, [availableDateTabs, selectedDateTab]);
 
   const hasBoxscoreData = useMemo(() => {
     if (!game) {
@@ -245,9 +324,9 @@ export function BoxScoreDashboard() {
           try {
             const details = await fetchGameDetails(candidate.id);
             return { id: candidate.id, details };
-          } catch (error) {
+          } catch {
             // Optional: log for debugging
-            // console.warn(`Failed to fetch details for game ${candidate.id}`, error);
+            // console.warn(`Failed to fetch details for game ${candidate.id}`);
             return null;
           }
         }),
@@ -325,23 +404,28 @@ export function BoxScoreDashboard() {
     [players, sortCol, sortDir],
   );
 
-   const topPerformers = useMemo(
-    () => getTopPerformersForDate(games, game?.date ?? "", TOP_PERFORMERS_LIMIT),
-    [game?.date, games],
+  const topPerformers = useMemo(
+    () =>
+      getTopPerformersForDate(
+        completedGames,
+        selectedDateTab === TODAY_TAB ? todayLabel : selectedDateTab,
+        TOP_PERFORMERS_LIMIT,
+      ),
+    [completedGames, selectedDateTab, todayLabel],
   );
-  if (!game) {
-    return null;
-  }
 
   const leaderboardIsLoading = loadingGames || loadingDetails || loadingDateDetails;
 
-  const accent = getAccent(activeTeam, dark, game.teamColors?.[activeTeam]);
-  const homeScore = game.score[game.home] ?? 0;
-  const awayScore = game.score[game.away] ?? 0;
-  const winTeam = homeScore > awayScore ? game.home : game.away;
+  const accent = game ? getAccent(activeTeam, dark, game.teamColors?.[activeTeam]) : "#e8401a";
+  const homeScore = game ? (game.score[game.home] ?? 0) : 0;
+  const awayScore = game ? (game.score[game.away] ?? 0) : 0;
+  const winTeam = game ? (homeScore > awayScore ? game.home : game.away) : "";
 
   const handleGameSelect = (selected: Game) => {
     setSelectedGameId(selected.id);
+    if (selectedDateTab !== TODAY_TAB) {
+      setSelectedDateTab(selected.date);
+    }
     setActiveTeam(selected.home);
     setSortCol("pts");
     setSortDir(-1);
@@ -366,6 +450,30 @@ export function BoxScoreDashboard() {
 
     setSortCol(key);
     setSortDir(-1);
+  };
+
+  const handleDateSelect = (dateTab: string) => {
+    if (dateTab === selectedDateTab) {
+      return;
+    }
+
+    const nextGames =
+      dateTab === TODAY_TAB
+        ? gamesForToday
+        : completedGames.filter((item) => item.date === dateTab);
+    const nextGame = nextGames[0];
+    setSelectedDateTab(dateTab);
+
+    if (!nextGame) {
+      return;
+    }
+
+    setSelectedGameId(nextGame.id);
+    setActiveTeam(nextGame.home);
+    setSortCol("pts");
+    setSortDir(-1);
+    setAnimKey((key) => key + 1);
+    setApiError(null);
   };
 
   const scheduleMessage =
@@ -405,16 +513,36 @@ export function BoxScoreDashboard() {
         transitionStyle={TRANSITION_STYLE}
       />
 
-      <GameSelector
-        games={games}
-        selectedGameId={game.id}
-        dark={dark}
-        theme={theme}
-        transitionStyle={TRANSITION_STYLE}
-        onSelectGame={handleGameSelect}
-      />
+      {availableDateTabs.length > 0 && (
+        <GameSelector
+          games={gamesForSelectedDate}
+          availableDates={availableDateTabs}
+          selectedDate={selectedDateTab}
+          selectedGameId={game?.id ?? ""}
+          dark={dark}
+          theme={theme}
+          transitionStyle={TRANSITION_STYLE}
+          onSelectDate={handleDateSelect}
+          onSelectGame={handleGameSelect}
+        />
+      )}
 
       <div style={{ padding: "0 28px 40px" }}>
+        {availableDateTabs.length === 0 && (
+          <div
+            style={{
+              padding: "12px 0",
+              fontSize: "12px",
+              letterSpacing: "0.6px",
+              color: theme.textMuted,
+              textTransform: "uppercase",
+              fontWeight: 600,
+            }}
+          >
+            No completed games found in the current range.
+          </div>
+        )}
+
         {statusMessage && (
           <div
             style={{
@@ -430,35 +558,39 @@ export function BoxScoreDashboard() {
           </div>
         )}
 
-        <QuarterBreakdown
-          game={game}
-          winTeam={winTeam}
-          dark={dark}
-          theme={theme}
-          transitionStyle={TRANSITION_STYLE}
-        />
+        {game && (
+          <>
+            <QuarterBreakdown
+              game={game}
+              winTeam={winTeam}
+              dark={dark}
+              theme={theme}
+              transitionStyle={TRANSITION_STYLE}
+            />
 
-        <TeamTabs
-          game={game}
-          activeTeam={activeTeam}
-          dark={dark}
-          theme={theme}
-          transitionStyle={TRANSITION_STYLE}
-          onSwitchTeam={handleTeamSwitch}
-        />
+            <TeamTabs
+              game={game}
+              activeTeam={activeTeam}
+              dark={dark}
+              theme={theme}
+              transitionStyle={TRANSITION_STYLE}
+              onSwitchTeam={handleTeamSwitch}
+            />
 
-        <PlayerStatsTable
-          gameId={game.id}
-          activeTeam={activeTeam}
-          animKey={animKey}
-          sortedPlayers={sortedPlayers}
-          sortCol={sortCol}
-          sortDir={sortDir}
-          accent={accent}
-          theme={theme}
-          transitionStyle={TRANSITION_STYLE}
-          onSort={handleSort}
-        />
+            <PlayerStatsTable
+              gameId={game.id}
+              activeTeam={activeTeam}
+              animKey={animKey}
+              sortedPlayers={sortedPlayers}
+              sortCol={sortCol}
+              sortDir={sortDir}
+              accent={accent}
+              theme={theme}
+              transitionStyle={TRANSITION_STYLE}
+              onSort={handleSort}
+            />
+          </>
+        )}
 
       </div>
       <button
@@ -560,7 +692,7 @@ export function BoxScoreDashboard() {
         <div style={{ overflow: "auto" }}>
           <TopPerformersLeaderboard
             limit={TOP_PERFORMERS_LIMIT}
-            dateLabel={game.date}
+            dateLabel={selectedDateTab === TODAY_TAB ? todayLabel : selectedDateTab}
             performers={topPerformers}
             isLoading={leaderboardIsLoading}
             theme={theme}

@@ -12,10 +12,13 @@ import { TeamLogo } from "./TeamLogo";
 
 interface GameSelectorProps {
   games: Game[];
+  availableDates: string[];
+  selectedDate: string;
   selectedGameId: string;
   dark: boolean;
   theme: Theme;
   transitionStyle: CSSProperties;
+  onSelectDate: (date: string) => void;
   onSelectGame: (game: Game) => void;
 }
 
@@ -46,10 +49,13 @@ function getScrollControls(node: HTMLDivElement | null): ScrollControls {
 
 export function GameSelector({
   games,
+  availableDates,
+  selectedDate,
   selectedGameId,
   dark,
   theme,
   transitionStyle,
+  onSelectDate,
   onSelectGame,
 }: GameSelectorProps) {
   const upcomingGames = games.filter((game) => game.statusState === "pre");
@@ -294,6 +300,44 @@ export function GameSelector({
 
   return (
     <div style={{ borderBottom: `1px solid ${theme.border}`, background: theme.pageBg, ...transitionStyle }}>
+      <div
+        className="scrollbar-hidden"
+        style={{
+          display: "flex",
+          gap: "8px",
+          overflowX: "auto",
+          padding: "10px 20px",
+          borderBottom: `1px solid ${theme.border}`,
+          background: theme.headerBg,
+        }}
+      >
+        {availableDates.map((date) => {
+          const isActive = selectedDate === date;
+
+          return (
+            <button
+              key={date}
+              onClick={() => onSelectDate(date)}
+              style={{
+                border: `1px solid ${isActive ? "#e8401a" : theme.border}`,
+                background: isActive ? theme.cardBg : theme.subHeader,
+                color: isActive ? theme.textPrimary : theme.textMuted,
+                borderRadius: "999px",
+                padding: "6px 10px",
+                fontSize: "11px",
+                fontWeight: 700,
+                letterSpacing: "0.8px",
+                textTransform: "uppercase",
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+            >
+              {date}
+            </button>
+          );
+        })}
+      </div>
+
       {renderScrollableRow(
         visiblePrimaryGames,
         primaryRowRef,
@@ -307,7 +351,7 @@ export function GameSelector({
             borderTop: `1px solid ${theme.border}`,
           }}
         >
-          <div
+          {/* <div
             style={{
               padding: "6px 20px",
               fontSize: "10px",
@@ -324,7 +368,7 @@ export function GameSelector({
             upcomingRowRef,
             upcomingControls,
             setUpcomingControls,
-          )}
+          )} */}
         </div>
       )}
     </div>
