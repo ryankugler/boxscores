@@ -159,6 +159,28 @@ export async function fetchScoreboardGames(lastDays = 7): Promise<Game[]> {
   return games;
 }
 
+export async function fetchScoreboardGamesForDate(date: Date): Promise<Game[]> {
+  const normalizedDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const dateParam = formatDate(normalizedDate);
+  const url = `${ESPN_NBA_API_BASE}/scoreboard?dates=${dateParam}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Scoreboard-by-date request failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as EspnScoreboardResponse;
+  const sortedEvents = [...(payload.events ?? [])].sort((a, b) => {
+    const aTime = new Date(a.date ?? 0).getTime();
+    const bTime = new Date(b.date ?? 0).getTime();
+    return bTime - aTime;
+  });
+
+  return sortedEvents
+    .map((event) => parseEventGame(event))
+    .filter((game): game is Game => game !== null);
+}
+
 export async function fetchConferenceStandings(): Promise<ConferenceStandings> {
   const url = `${ESPN_CORE_API_BASE}/standings`;
 

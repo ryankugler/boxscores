@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchConferenceStandings,
   fetchGameDetails,
   fetchScoreboardGames,
+  fetchScoreboardGamesForDate,
 } from "./api/espn";
 import NBAPlayoffBracket from "../playoffBracket/NBAPlayoffBracket";
 import { ConferenceStandings } from "./components/ConferenceStandings";
@@ -25,12 +26,14 @@ import type {
   SortableStatKey,
   StatColumn,
   TeamCode,
+  TopPerformer,
 } from "./types";
 
 const LIVE_REFRESH_INTERVAL_MS = 30_000;
-const TOP_PERFORMERS_LIMIT = 5;
+const TOP_PERFORMERS_LIMIT = 10;
 const TODAY_TAB = "Today";
 const VIEW_TAB_BOXSCORES: TopNavTab = "boxscores";
+const VIEW_TAB_LEADERBOARD: TopNavTab = "leaderboard";
 const VIEW_TAB_STANDINGS: TopNavTab = "standings";
 const VIEW_TAB_PLAYOFFS: TopNavTab = "playoffs";
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -96,12 +99,12 @@ export function BoxScoreDashboard() {
   const [sortDir, setSortDir] = useState<SortDirection>(-1);
   const [animKey, setAnimKey] = useState(0);
   const [dark, setDark] = useState(false);
-  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
-  const [detailsLoadingByGame, setDetailsLoadingByGame] = useState<Record<string, boolean>>({});
   const [loadingGames, setLoadingGames] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [loadingDateDetails, setLoadingDateDetails] = useState(false);
+  const [leaderboardPerformers, setLeaderboardPerformers] = useState<TopPerformer[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [conferenceStandings, setConferenceStandings] = useState<ConferenceStandingsData>({
     eastern: [],
     western: [],
@@ -111,6 +114,7 @@ export function BoxScoreDashboard() {
   const [detailsFetchedAtByGame, setDetailsFetchedAtByGame] = useState<
     Record<string, number>
   >({});
+  const leaderboardRequestIdRef = useRef(0);
 
   const theme = useMemo(() => mkTheme(dark), [dark]);
   const todayLabel = useMemo(() => DATE_FORMATTER.format(new Date()), []);
@@ -137,6 +141,7 @@ export function BoxScoreDashboard() {
       .filter((item) => item.date === selectedDateTab)
       .sort((a, b) => parseGameDate(b.date) - parseGameDate(a.date));
   }, [completedGames, gamesForToday, selectedDateTab]);
+  const selectedDateLabel = selectedDateTab === TODAY_TAB ? todayLabel : selectedDateTab;
 
   const game = useMemo(() => {
     return (
@@ -329,126 +334,71 @@ export function BoxScoreDashboard() {
   }, [game, hasBoxscoreData, isPregame, isLiveGame, lastDetailsFetchAt]);
 
   useEffect(() => {
-  if (!game) {
-    return;
-  }
-
-  const sameDateGames = games.filter(
-    (candidate) =>
-      candidate.date === game.date &&
-      candidate.id !== game.id &&
-      candidate.statusState !== "pre",
-  );
-
-  const missingGames = sameDateGames.filter((candidate) => {
-    const hasData = gameHasBoxscoreData(candidate);
-    const wasFetchedSuccessfully = (detailsFetchedAtByGame[candidate.id] ?? 0) > 0;
-    const isCurrentlyLoading = detailsLoadingByGame[candidate.id] === true;
-
-    // Only fetch if:
-    // - no boxscore data yet
-    // - not already fetched successfully
-    // - not already in flight
-    return !hasData && !wasFetchedSuccessfully && !isCurrentlyLoading;
-  });
-
-  if (missingGames.length === 0) {
-    return;
-  }
-
-  let cancelled = false;
-
-  // Mark these requests as in-flight immediately (prevents duplicate requests on rerender)
-  setDetailsLoadingByGame((current) => {
-    const next = { ...current };
-    for (const candidate of missingGames) {
-      next[candidate.id] = true;
+    if (activeViewTab !== VIEW_TAB_LEADERBOARD || !selectedDateLabel) {
+      return;
     }
-    return next;
-  });
 
-  const loadDateDetails = async () => {
-    setLoadingDateDetails(true);
+    const parsedDate = parseGameDate(selectedDateLabel);
+    if (parsedDate <= 0) {
+      setLeaderboardPerformers([]);
+      setLeaderboardError("Invalid date selected for leaderboard.");
+      return;
+    }
 
-    try {
-      const results = await Promise.all(
-        missingGames.map(async (candidate) => {
-          try {
-            const details = await fetchGameDetails(candidate.id);
-            return { id: candidate.id, details };
-          } catch {
-            // Optional: log for debugging
-            // console.warn(`Failed to fetch details for game ${candidate.id}`);
-            return null;
-          }
-        }),
-      );
+    let cancelled = false;
+    const requestId = leaderboardRequestIdRef.current + 1;
+    leaderboardRequestIdRef.current = requestId;
 
-      if (cancelled) {
-        return;
-      }
+    const loadDailyLeaderboard = async () => {
+      setLoadingLeaderboard(true);
+      setLeaderboardError(null);
+      setLeaderboardPerformers([]);
 
-      const successfulResults = results.filter(
-        (result): result is { id: string; details: GameDetailsPayload } => result !== null,
-      );
+      try {
+        const dailyGames = await fetchScoreboardGamesForDate(new Date(parsedDate));
+        if (cancelled || requestId !== leaderboardRequestIdRef.current) {
+          return;
+        }
 
-      // Merge successful detail payloads into games
-      if (successfulResults.length > 0) {
-        const detailsByGame = new Map(
-          successfulResults.map((result) => [result.id, result.details]),
-        );
-
-        setGames((currentGames) =>
-          currentGames.map((existingGame) => {
-            const details = detailsByGame.get(existingGame.id);
-            return details
-              ? mergeGameWithDetails(existingGame, details)
-              : existingGame;
+        const nonPregameGames = dailyGames.filter((candidate) => candidate.statusState !== "pre");
+        const detailedGames = await Promise.all(
+          nonPregameGames.map(async (candidate) => {
+            try {
+              const details = await fetchGameDetails(candidate.id);
+              return mergeGameWithDetails(candidate, details);
+            } catch {
+              return candidate;
+            }
           }),
         );
 
-        // Mark ONLY successful fetches as fetched
-        setDetailsFetchedAtByGame((current) => {
-          const next = { ...current };
-          const fetchedAt = Date.now();
+        if (cancelled || requestId !== leaderboardRequestIdRef.current) {
+          return;
+        }
 
-          for (const result of successfulResults) {
-            next[result.id] = fetchedAt;
-          }
-
-          return next;
-        });
+        const top = getTopPerformersForDate(
+          detailedGames,
+          selectedDateLabel,
+          TOP_PERFORMERS_LIMIT,
+        );
+        setLeaderboardPerformers(top);
+      } catch {
+        if (!cancelled && requestId === leaderboardRequestIdRef.current) {
+          setLeaderboardError("Could not load daily leaderboard from the API.");
+        }
+      } finally {
+        if (!cancelled && requestId === leaderboardRequestIdRef.current) {
+          setLoadingLeaderboard(false);
+        }
       }
-    } finally {
-      if (!cancelled) {
-        // Clear in-flight flags for all attempted games (success or failure)
-        setDetailsLoadingByGame((current) => {
-          const next = { ...current };
+    };
 
-          for (const candidate of missingGames) {
-            delete next[candidate.id];
-          }
+    void loadDailyLeaderboard();
 
-          return next;
-        });
-
-        setLoadingDateDetails(false);
-      }
-    }
-  };
-
-  void loadDateDetails();
-
-  return () => {
-    cancelled = true;
-  };
-}, [game, games, detailsFetchedAtByGame, detailsLoadingByGame]);
-
-  useEffect(() => {
-    if (activeViewTab !== VIEW_TAB_BOXSCORES && isLeaderboardOpen) {
-      setIsLeaderboardOpen(false);
-    }
-  }, [activeViewTab, isLeaderboardOpen]);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeViewTab, selectedDateLabel]);
 
   const players = useMemo(() => {
     if (!game) {
@@ -462,17 +412,7 @@ export function BoxScoreDashboard() {
     [players, sortCol, sortDir],
   );
 
-  const topPerformers = useMemo(
-    () =>
-      getTopPerformersForDate(
-        completedGames,
-        selectedDateTab === TODAY_TAB ? todayLabel : selectedDateTab,
-        TOP_PERFORMERS_LIMIT,
-      ),
-    [completedGames, selectedDateTab, todayLabel],
-  );
-
-  const leaderboardIsLoading = loadingGames || loadingDetails || loadingDateDetails;
+  const leaderboardIsLoading = loadingLeaderboard;
 
   const accent = game ? getAccent(activeTeam, dark, game.teamColors?.[activeTeam]) : "#e8401a";
   const homeScore = game ? (game.score[game.home] ?? 0) : 0;
@@ -574,23 +514,25 @@ export function BoxScoreDashboard() {
       />
 
       <div style={{ padding: "0 28px 40px" }}>
+        {(activeViewTab === VIEW_TAB_BOXSCORES ||
+          activeViewTab === VIEW_TAB_LEADERBOARD) &&
+          availableDateTabs.length > 0 && (
+            <GameSelector
+              games={gamesForSelectedDate}
+              availableDates={availableDateTabs}
+              selectedDate={selectedDateTab}
+              showUpcomingGames={selectedDateTab === TODAY_TAB}
+              selectedGameId={game?.id ?? ""}
+              dark={dark}
+              theme={theme}
+              transitionStyle={TRANSITION_STYLE}
+              onSelectDate={handleDateSelect}
+              onSelectGame={handleGameSelect}
+            />
+          )}
+
         {activeViewTab === VIEW_TAB_BOXSCORES && (
           <>
-            {availableDateTabs.length > 0 && (
-              <GameSelector
-                games={gamesForSelectedDate}
-                availableDates={availableDateTabs}
-                selectedDate={selectedDateTab}
-                showUpcomingGames={selectedDateTab === TODAY_TAB}
-                selectedGameId={game?.id ?? ""}
-                dark={dark}
-                theme={theme}
-                transitionStyle={TRANSITION_STYLE}
-                onSelectDate={handleDateSelect}
-                onSelectGame={handleGameSelect}
-              />
-            )}
-
             {availableDateTabs.length === 0 && (
               <div
                 style={{
@@ -657,6 +599,34 @@ export function BoxScoreDashboard() {
           </>
         )}
 
+        {activeViewTab === VIEW_TAB_LEADERBOARD && (
+          <>
+            {availableDateTabs.length === 0 && (
+              <div
+                style={{
+                  padding: "12px 0",
+                  fontSize: "12px",
+                  letterSpacing: "0.6px",
+                  color: theme.textMuted,
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                No games found in the current range.
+              </div>
+            )}
+            <TopPerformersLeaderboard
+              limit={TOP_PERFORMERS_LIMIT}
+              dateLabel={selectedDateLabel}
+              performers={leaderboardPerformers}
+              isLoading={leaderboardIsLoading}
+              error={leaderboardError}
+              theme={theme}
+              transitionStyle={TRANSITION_STYLE}
+            />
+          </>
+        )}
+
         {activeViewTab === VIEW_TAB_STANDINGS && (
           <ConferenceStandings
             eastern={conferenceStandings.eastern}
@@ -679,119 +649,6 @@ export function BoxScoreDashboard() {
           />
         )}
       </div>
-      {activeViewTab === VIEW_TAB_BOXSCORES && (
-        <>
-          <button
-            onClick={() => setIsLeaderboardOpen(true)}
-            style={{
-              position: "fixed",
-              right: "20px",
-              bottom: "20px",
-              border: "none",
-              borderRadius: "999px",
-              padding: "10px 14px",
-              background: "#e8401a",
-              color: "#fff",
-              fontWeight: 800,
-              fontSize: "12px",
-              letterSpacing: "1px",
-              textTransform: "uppercase",
-              cursor: "pointer",
-              zIndex: 20,
-              boxShadow: dark
-                ? "0 8px 24px rgba(0, 0, 0, 0.45)"
-                : "0 8px 24px rgba(0, 0, 0, 0.2)",
-            }}
-          >
-            Top {TOP_PERFORMERS_LIMIT}
-          </button>
-
-          {isLeaderboardOpen && (
-            <button
-              aria-label="Close leaderboard panel"
-              onClick={() => setIsLeaderboardOpen(false)}
-              style={{
-                position: "fixed",
-                inset: 0,
-                border: "none",
-                background: "rgba(0, 0, 0, 0.4)",
-                zIndex: 29,
-                padding: 0,
-                cursor: "pointer",
-              }}
-            />
-          )}
-
-          <aside
-            aria-hidden={!isLeaderboardOpen}
-            style={{
-              position: "fixed",
-              top: 0,
-              right: 0,
-              width: "min(520px, 100vw)",
-              height: "100vh",
-              background: theme.pageBg,
-              borderLeft: `1px solid ${theme.border}`,
-              transform: isLeaderboardOpen ? "translateX(0)" : "translateX(100%)",
-              transition: "transform 0.2s ease-out",
-              zIndex: 30,
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-        <div
-          style={{
-            padding: "12px 14px",
-            borderBottom: `1px solid ${theme.border}`,
-            background: theme.headerBg,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "12px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 800,
-              letterSpacing: "1px",
-              textTransform: "uppercase",
-            }}
-          >
-            Daily Leaderboard
-          </div>
-          <button
-            aria-label="Close leaderboard panel"
-            onClick={() => setIsLeaderboardOpen(false)}
-            style={{
-              border: `1px solid ${theme.border}`,
-              background: theme.cardBg,
-              color: theme.textPrimary,
-              borderRadius: "4px",
-              padding: "4px 8px",
-              fontSize: "12px",
-              fontWeight: 700,
-              letterSpacing: "0.5px",
-              cursor: "pointer",
-            }}
-          >
-            Close
-          </button>
-        </div>
-        <div style={{ overflow: "auto" }}>
-          <TopPerformersLeaderboard
-            limit={TOP_PERFORMERS_LIMIT}
-            dateLabel={selectedDateTab === TODAY_TAB ? todayLabel : selectedDateTab}
-            performers={topPerformers}
-            isLoading={leaderboardIsLoading}
-            theme={theme}
-            transitionStyle={TRANSITION_STYLE}
-          />
-        </div>
-          </aside>
-        </>
-      )}
     </div>
   );
 }
