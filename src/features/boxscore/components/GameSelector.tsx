@@ -60,9 +60,12 @@ export function GameSelector({
   onSelectDate,
   onSelectGame,
 }: GameSelectorProps) {
+  const liveGames = games.filter((game) => game.statusState === "in");
   const upcomingGames = games.filter((game) => game.statusState === "pre");
   const primaryGames = games.filter((game) => game.statusState !== "pre");
-  const visiblePrimaryGames = primaryGames.length > 0 ? primaryGames : games;
+  const shouldSplitUpcomingSection =
+    showUpcomingGames && liveGames.length > 0 && upcomingGames.length > 0;
+  const visiblePrimaryGames = shouldSplitUpcomingSection ? primaryGames : games;
 
   const primaryRowRef = useRef<HTMLDivElement | null>(null);
   const upcomingRowRef = useRef<HTMLDivElement | null>(null);
@@ -347,7 +350,7 @@ export function GameSelector({
         setPrimaryControls,
       )}
 
-      {showUpcomingGames && upcomingGames.length > 0 && (
+      {shouldSplitUpcomingSection && (
         <div
           style={{
             borderTop: `1px solid ${theme.border}`,
