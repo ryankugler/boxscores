@@ -22,12 +22,20 @@ export function QuarterBreakdown({ game, winTeam, dark, theme, transitionStyle }
     <div
       style={{
         background: theme.cardBg,
-        padding: "16px 22px",
+        padding: "14px clamp(10px, 3.5vw, 22px)",
         borderBottom: `1px solid ${theme.border}`,
         ...transitionStyle,
       }}
     >
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+      <div className="scrollbar-hidden" style={{ overflowX: "auto" }}>
+      <table
+        style={{
+          width: "100%",
+          minWidth: "540px",
+          borderCollapse: "collapse",
+          fontSize: "13px",
+        }}
+      >
         <thead>
           <tr>
             <th
@@ -111,6 +119,7 @@ export function QuarterBreakdown({ game, winTeam, dark, theme, transitionStyle }
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

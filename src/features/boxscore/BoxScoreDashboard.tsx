@@ -513,7 +513,7 @@ export function BoxScoreDashboard() {
         transitionStyle={TRANSITION_STYLE}
       />
 
-      <div style={{ padding: "0 28px 40px" }}>
+      <div className="dashboard-content" style={{ padding: "0 clamp(10px, 3.8vw, 28px) 32px" }}>
         {(activeViewTab === VIEW_TAB_BOXSCORES ||
           activeViewTab === VIEW_TAB_LEADERBOARD) &&
           availableDateTabs.length > 0 && (
