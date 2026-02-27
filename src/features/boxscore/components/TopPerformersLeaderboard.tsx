@@ -7,6 +7,7 @@ interface TopPerformersLeaderboardProps {
   dateLabel: string;
   performers: TopPerformer[];
   isLoading: boolean;
+  error?: string | null;
   theme: Theme;
   transitionStyle: CSSProperties;
 }
@@ -16,6 +17,7 @@ export function TopPerformersLeaderboard({
   dateLabel,
   performers,
   isLoading,
+  error,
   theme,
   transitionStyle,
 }: TopPerformersLeaderboardProps) {
@@ -54,8 +56,21 @@ export function TopPerformersLeaderboard({
             letterSpacing: "1px",
             color: theme.textMuted,
             textTransform: "uppercase",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
           }}
         >
+          {isLoading && (
+            <span
+              style={{
+                fontSize: "11px",
+                lineHeight: 1,
+              }}
+            >
+              ⏳
+            </span>
+          )}
           {dateLabel}
         </div>
       </div>
@@ -70,7 +85,7 @@ export function TopPerformersLeaderboard({
             textTransform: "uppercase",
           }}
         >
-          {isLoading ? "Loading top performers..." : "No box score data available for this day."}
+          {error ?? (isLoading ? "Loading top performers..." : "No box score data available for this day.")}
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>

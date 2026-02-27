@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 
 import type { Theme } from "../types";
 
-export type TopNavTab = "boxscores" | "standings" | "playoffs";
+export type TopNavTab = "boxscores" | "leaderboard" | "standings" | "playoffs";
 
 interface HeaderProps {
   activeTab: TopNavTab;
@@ -73,6 +73,23 @@ export function Header({
           }}
         >
           Box Scores
+        </button>
+        <button
+          onClick={() => onSelectTab("leaderboard")}
+          style={{
+            border: `1px solid ${activeTab === "leaderboard" ? "#e8401a" : theme.border}`,
+            background: activeTab === "leaderboard" ? "#e8401a" : theme.cardBg,
+            color: activeTab === "leaderboard" ? "#fff" : theme.textSecond,
+            borderRadius: "999px",
+            padding: "5px 10px",
+            fontSize: "11px",
+            letterSpacing: "0.8px",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            cursor: "pointer",
+          }}
+        >
+          Leaderboard
         </button>
         <button
           onClick={() => onSelectTab("standings")}
