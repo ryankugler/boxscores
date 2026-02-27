@@ -42,20 +42,27 @@ export function PlayerStatsTable({
   onSort,
 }: PlayerStatsTableProps) {
   return (
-    <div style={{ background: theme.cardBg, overflowX: "auto", ...transitionStyle }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+    <div
+      className="player-stats-wrap scrollbar-hidden"
+      style={{ background: theme.cardBg, overflowX: "auto", ...transitionStyle }}
+    >
+      <table
+        className="player-stats-table"
+        style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}
+      >
         <thead>
           <tr style={{ background: theme.subHeader, borderBottom: `2px solid ${theme.border}` }}>
             <th
+              className="player-col-header"
               style={{
                 textAlign: "left",
-                padding: "11px 16px",
+                padding: "11px clamp(10px, 2.2vw, 16px)",
                 fontWeight: 700,
                 letterSpacing: "2px",
                 fontSize: "11px",
                 color: theme.textMuted,
                 textTransform: "uppercase",
-                minWidth: "165px",
+                minWidth: "clamp(112px, 28vw, 165px)",
                 position: "sticky",
                 left: 0,
                 background: theme.subHeader,
@@ -83,14 +90,15 @@ export function PlayerStatsTable({
 
               return (
                 <th
-                  key={column}
-                  onClick={() => onSort(column)}
-                  style={{
-                    textAlign: "center",
-                    padding: "11px 10px",
-                    fontWeight: 700,
-                    letterSpacing: "1px",
-                    fontSize: "11px",
+                key={column}
+                onClick={() => onSort(column)}
+                className="stat-col-header"
+                style={{
+                  textAlign: "center",
+                  padding: "11px clamp(6px, 1.8vw, 10px)",
+                  fontWeight: 700,
+                  letterSpacing: "1px",
+                  fontSize: "11px",
                     color: isActive ? accent : theme.textMuted,
                     textTransform: "uppercase",
                     cursor: "pointer",
@@ -129,8 +137,9 @@ export function PlayerStatsTable({
                 }}
               >
                 <td
+                  className="player-col-cell"
                   style={{
-                    padding: "10px 16px",
+                    padding: "10px clamp(10px, 2.2vw, 16px)",
                     fontWeight: isTop ? 800 : 600,
                     fontSize: isTop ? "15px" : "14px",
                     color: isTop ? theme.textPrimary : theme.textSecond,
@@ -141,22 +150,39 @@ export function PlayerStatsTable({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {isTop && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      minWidth: 0,
+                    }}
+                  >
+                    {isTop && (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: "6px",
+                          height: "6px",
+                          background: accent,
+                          borderRadius: "50%",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
                     <span
+                      className="player-name-text"
                       style={{
-                        display: "inline-block",
-                        width: "6px",
-                        height: "6px",
-                        background: accent,
-                        borderRadius: "50%",
-                        marginRight: "8px",
-                        verticalAlign: "middle",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
                       }}
-                    />
-                  )}
-                  {player.name}
+                    >
+                      {player.name}
+                    </span>
+                  </div>
                 </td>
                 <td
+                  className="pos-col-cell"
                   style={{
                     textAlign: "center",
                     padding: "10px 8px",
@@ -171,9 +197,10 @@ export function PlayerStatsTable({
                 {RATIO_COLUMNS.map(([made, attempted]) => (
                   <td
                     key={`${made}-${attempted}`}
+                    className="ratio-col-cell"
                     style={{
                       textAlign: "center",
-                      padding: "10px 10px",
+                      padding: "10px clamp(6px, 1.8vw, 10px)",
                       color: theme.textMono,
                       fontFamily: "monospace",
                       fontSize: "13px",
@@ -203,9 +230,10 @@ export function PlayerStatsTable({
                   return (
                     <td
                       key={key}
+                      className="numeric-col-cell"
                       style={{
                         textAlign: "center",
-                        padding: "10px 10px",
+                        padding: "10px clamp(6px, 1.8vw, 10px)",
                         fontWeight: isBig ? 900 : isMedium ? 700 : 500,
                         fontSize: isBig ? "16px" : "14px",
                         color,

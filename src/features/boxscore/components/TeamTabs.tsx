@@ -21,7 +21,16 @@ export function TeamTabs({ game, activeTeam, dark, theme, transitionStyle, onSwi
   };
 
   return (
-    <div style={{ display: "flex", background: theme.cardBg, borderBottom: `1px solid ${theme.border}`, ...transitionStyle }}>
+    <div
+      className="team-tabs-row scrollbar-hidden"
+      style={{
+        display: "flex",
+        background: theme.cardBg,
+        borderBottom: `1px solid ${theme.border}`,
+        overflowX: "auto",
+        ...transitionStyle,
+      }}
+    >
       {teams.map((team) => {
         const isActive = activeTeam === team;
         const accent = getAccent(team, dark, game.teamColors?.[team]);
@@ -34,7 +43,7 @@ export function TeamTabs({ game, activeTeam, dark, theme, transitionStyle, onSwi
               background: isActive ? theme.cardBg : theme.subHeader,
               border: "none",
               borderBottom: `3px solid ${isActive ? accent : "transparent"}`,
-              padding: "12px 22px",
+              padding: "12px clamp(12px, 3.4vw, 22px)",
               cursor: "pointer",
               color: isActive ? theme.textPrimary : theme.textMuted,
               fontFamily: "'Barlow Condensed', sans-serif",
@@ -46,6 +55,8 @@ export function TeamTabs({ game, activeTeam, dark, theme, transitionStyle, onSwi
               display: "flex",
               alignItems: "center",
               gap: "10px",
+              flexShrink: 0,
+              minWidth: "max-content",
             }}
           >
             <TeamLogo
