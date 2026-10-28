@@ -137,16 +137,29 @@ interface GameDetails {
 }
 
 export async function fetchScoreboardGames(lastDays = 7): Promise<Game[]> {
-  const range = getDateRange(lastDays);
-  const url = `${ESPN_NBA_API_BASE}/scoreboard?dates=${range}`;
+  // ESPN's scoreboard rejects date ranges (YYYYMMDD-YYYYMMDD) with a 400,
+  // so request each day individually and merge the results.
+  const results = await Promise.allSettled(
+    getRecentDates(lastDays).map((date) => fetchScoreboardEvents(formatDate(date))),
+  );
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Scoreboard request failed with status ${response.status}`);
+  const fulfilled = results.filter(
+    (result): result is PromiseFulfilledResult<EspnEvent[]> => result.status === "fulfilled",
+  );
+  if (fulfilled.length === 0) {
+    throw new Error("Scoreboard requests failed for every day in range");
   }
 
-  const payload = (await response.json()) as EspnScoreboardResponse;
-  const sortedEvents = [...(payload.events ?? [])].sort((a, b) => {
+  const eventsById = new Map<string, EspnEvent>();
+  fulfilled.forEach((result) => {
+    result.value.forEach((event) => {
+      if (event.id) {
+        eventsById.set(event.id, event);
+      }
+    });
+  });
+
+  const sortedEvents = [...eventsById.values()].sort((a, b) => {
     const aTime = new Date(a.date ?? 0).getTime();
     const bTime = new Date(b.date ?? 0).getTime();
     return bTime - aTime;
@@ -157,6 +170,18 @@ export async function fetchScoreboardGames(lastDays = 7): Promise<Game[]> {
     .filter((game): game is Game => game !== null);
 
   return games;
+}
+
+async function fetchScoreboardEvents(dateParam: string): Promise<EspnEvent[]> {
+  const url = `${ESPN_NBA_API_BASE}/scoreboard?dates=${dateParam}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Scoreboard request failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as EspnScoreboardResponse;
+  return payload.events ?? [];
 }
 
 export async function fetchScoreboardGamesForDate(date: Date): Promise<Game[]> {
@@ -691,12 +716,15 @@ function normalizeHexColor(value?: string): string | undefined {
   return `#${cleaned.toUpperCase()}`;
 }
 
-function getDateRange(lastDays: number): string {
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(end.getDate() - Math.max(lastDays - 1, 0));
+function getRecentDates(lastDays: number): Date[] {
+  const today = new Date();
+  const count = Math.max(lastDays, 1);
 
-  return `${formatDate(start)}-${formatDate(end)}`;
+  return Array.from({ length: count }, (_, offset) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    return date;
+  });
 }
 
 function formatDate(date: Date): string {
