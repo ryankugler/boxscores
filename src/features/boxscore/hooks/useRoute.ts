@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type View = "boxscores" | "leaderboard" | "standings" | "playoffs";
+export type View = "boxscores" | "leaderboard" | "standings" | "playoffs" | "players";
 
 export interface Route {
   view: View;
   gameId?: string;
+  playerId?: string;
 }
 
 const VIEW_PATHS: Record<Exclude<View, "boxscores">, string> = {
+  players: "/players",
   leaderboard: "/leaderboard",
   standings: "/standings",
   playoffs: "/playoffs",
@@ -21,6 +23,11 @@ export function parseRoute(pathname: string): Route {
     return { view: "boxscores", gameId: decodeURIComponent(gameMatch[1]) };
   }
 
+  const playerMatch = path.match(/^\/players\/([^/]+)$/);
+  if (playerMatch) {
+    return { view: "players", playerId: decodeURIComponent(playerMatch[1]) };
+  }
+
   const view = (Object.keys(VIEW_PATHS) as Array<keyof typeof VIEW_PATHS>).find(
     (key) => VIEW_PATHS[key] === path,
   );
@@ -31,6 +38,10 @@ export function parseRoute(pathname: string): Route {
 export function routeToPath(route: Route): string {
   if (route.view === "boxscores") {
     return route.gameId ? `/game/${encodeURIComponent(route.gameId)}` : "/";
+  }
+
+  if (route.view === "players" && route.playerId) {
+    return `/players/${encodeURIComponent(route.playerId)}`;
   }
 
   return VIEW_PATHS[route.view];
@@ -55,6 +66,7 @@ export function useRoute() {
         window.history.replaceState(null, "", path);
       } else {
         window.history.pushState(null, "", path);
+        window.scrollTo({ top: 0 });
       }
     }
     setRoute(next);
