@@ -1,23 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchConferenceStandings,
+  fetchGameById,
   fetchGameDetails,
   fetchScoreboardGames,
   fetchScoreboardGamesForDate,
 } from "./api/espn";
 import NBAPlayoffBracket from "../playoffBracket/NBAPlayoffBracket";
+import styles from "./BoxScoreDashboard.module.css";
+import { getReadableAccent, getTeamPalette } from "./color";
 import { ConferenceStandings } from "./components/ConferenceStandings";
 import { GameSelector } from "./components/GameSelector";
-import { Header, type TopNavTab } from "./components/Header";
+import { Header } from "./components/Header";
 import { PlayerStatsTable } from "./components/PlayerStatsTable";
-import { QuarterBreakdown } from "./components/QuarterBreakdown";
+import { Scorebug } from "./components/Scorebug";
+import { StatusBar } from "./components/StatusBar";
 import { TeamTabs } from "./components/TeamTabs";
-import { getAccent } from "./data/constants";
-import { GAMES } from "./data/games";
-import { COL_KEY, getTopPerformersForDate, sortPlayers } from "./stats";
-import { mkTheme, TRANSITION_STYLE } from "./theme";
 import { TopPerformersLeaderboard } from "./components/TopPerformersLeaderboard";
+import { GAMES } from "./data/games";
+import { useRoute, type View } from "./hooks/useRoute";
+import { useThemePreference } from "./hooks/useThemePreference";
+import { COL_KEY, getTopPerformersForDate, sortPlayers } from "./stats";
+import { THEME, TRANSITION_STYLE } from "./theme";
 
 import type {
   ConferenceStandings as ConferenceStandingsData,
@@ -30,12 +35,9 @@ import type {
 } from "./types";
 
 const LIVE_REFRESH_INTERVAL_MS = 30_000;
+const PREGAME_REFRESH_INTERVAL_MS = 60_000;
 const TOP_PERFORMERS_LIMIT = 10;
 const TODAY_TAB = "Today";
-const VIEW_TAB_BOXSCORES: TopNavTab = "boxscores";
-const VIEW_TAB_LEADERBOARD: TopNavTab = "leaderboard";
-const VIEW_TAB_STANDINGS: TopNavTab = "standings";
-const VIEW_TAB_PLAYOFFS: TopNavTab = "playoffs";
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -72,6 +74,7 @@ function mergeGameWithDetails(game: Game, details: GameDetailsPayload): Game {
     ...game,
     score: details.score,
     periods: details.periods,
+    overtimes: details.overtimes,
     players: {
       ...game.players,
       ...details.players,
@@ -89,19 +92,50 @@ function mergeGameWithDetails(game: Game, details: GameDetailsPayload): Game {
   };
 }
 
+// Folds a fresh scoreboard snapshot into the current games, keeping any
+// box score detail already loaded for each game.
+function mergeScoreboardUpdate(current: Game[], fresh: Game[]): Game[] {
+  const freshById = new Map(fresh.map((game) => [game.id, game]));
+  const merged = current.map((game) => {
+    const update = freshById.get(game.id);
+    if (!update) {
+      return game;
+    }
+
+    freshById.delete(game.id);
+    return {
+      ...game,
+      score: update.score,
+      periods: update.periods,
+      overtimes: update.overtimes,
+      records: update.records ?? game.records,
+      statusState: update.statusState,
+      statusText: update.statusText,
+    };
+  });
+
+  return [...merged, ...freshById.values()];
+}
+
 export function BoxScoreDashboard() {
-  const [games, setGames] = useState<Game[]>(GAMES);
-  const [activeViewTab, setActiveViewTab] = useState<TopNavTab>(VIEW_TAB_BOXSCORES);
+  const { route, navigate } = useRoute();
+  const { dark, toggle: toggleTheme } = useThemePreference();
+  const activeView = route.view;
+
+  const [games, setGames] = useState<Game[]>([]);
   const [selectedDateTab, setSelectedDateTab] = useState<string>(TODAY_TAB);
-  const [selectedGameId, setSelectedGameId] = useState<string>(GAMES[0]?.id ?? "");
-  const [activeTeam, setActiveTeam] = useState<TeamCode>(GAMES[0]?.home ?? "LAL");
+  const [selectedGameId, setSelectedGameId] = useState<string>("");
+  const [activeTeam, setActiveTeam] = useState<TeamCode>("");
   const [sortCol, setSortCol] = useState<SortableStatKey>("pts");
   const [sortDir, setSortDir] = useState<SortDirection>(-1);
   const [animKey, setAnimKey] = useState(0);
-  const [dark, setDark] = useState(false);
-  const [loadingGames, setLoadingGames] = useState(false);
+  const [loadingGames, setLoadingGames] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [usingSampleData, setUsingSampleData] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [scoreboardRequest, setScoreboardRequest] = useState(0);
   const [leaderboardPerformers, setLeaderboardPerformers] = useState<TopPerformer[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
@@ -115,8 +149,8 @@ export function BoxScoreDashboard() {
     Record<string, number>
   >({});
   const leaderboardRequestIdRef = useRef(0);
+  const appliedRouteGameIdRef = useRef<string | undefined>(undefined);
 
-  const theme = useMemo(() => mkTheme(dark), [dark]);
   const todayLabel = useMemo(() => DATE_FORMATTER.format(new Date()), []);
   const completedGames = useMemo(() => games.filter(isCompletedGame), [games]);
   const availableHistoricalDates = useMemo(() => {
@@ -128,18 +162,14 @@ export function BoxScoreDashboard() {
     return [TODAY_TAB, ...availableHistoricalDates];
   }, [availableHistoricalDates]);
   const gamesForToday = useMemo(() => {
-    return games
-      .filter((item) => item.date === todayLabel)
-      .sort((a, b) => parseGameDate(b.date) - parseGameDate(a.date));
+    return games.filter((item) => item.date === todayLabel);
   }, [games, todayLabel]);
   const gamesForSelectedDate = useMemo(() => {
     if (selectedDateTab === TODAY_TAB) {
       return gamesForToday;
     }
 
-    return completedGames
-      .filter((item) => item.date === selectedDateTab)
-      .sort((a, b) => parseGameDate(b.date) - parseGameDate(a.date));
+    return completedGames.filter((item) => item.date === selectedDateTab);
   }, [completedGames, gamesForToday, selectedDateTab]);
   const selectedDateLabel = selectedDateTab === TODAY_TAB ? todayLabel : selectedDateTab;
 
@@ -151,19 +181,20 @@ export function BoxScoreDashboard() {
     );
   }, [gamesForSelectedDate, selectedGameId]);
 
-  useEffect(() => {
-    if (!game) {
-      return;
-    }
+  const selectGame = useCallback((selected: Game) => {
+    setSelectedGameId(selected.id);
+    setActiveTeam(selected.home);
+    setSortCol("pts");
+    setSortDir(-1);
+    setAnimKey((key) => key + 1);
+    setDetailsError(null);
+  }, []);
 
-    if (game.id !== selectedGameId) {
-      setSelectedGameId(game.id);
-      setActiveTeam(game.home);
-      setSortCol("pts");
-      setSortDir(-1);
-      setAnimKey((key) => key + 1);
+  useEffect(() => {
+    if (game && game.id !== selectedGameId) {
+      selectGame(game);
     }
-  }, [game, selectedGameId]);
+  }, [game, selectedGameId, selectGame]);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,25 +204,29 @@ export function BoxScoreDashboard() {
 
       try {
         const apiGames = await fetchScoreboardGames(7);
-        if (cancelled || apiGames.length === 0) {
+        if (cancelled) {
           return;
         }
 
-        const preferredGame = apiGames.find((item) => item.statusState !== "pre") ?? apiGames[0];
         const todayGame = apiGames.find((item) => item.date === todayLabel);
+        const preferredGame = apiGames.find((item) => item.statusState !== "pre") ?? apiGames[0];
         const initialGame = todayGame ?? preferredGame;
 
         setGames(apiGames);
-        setSelectedDateTab(todayGame ? TODAY_TAB : initialGame.date);
-        setSelectedGameId(initialGame.id);
-        setActiveTeam(initialGame.home);
-        setSortCol("pts");
-        setSortDir(-1);
-        setAnimKey((key) => key + 1);
-        setApiError(null);
+        setUsingSampleData(false);
+        setLastUpdatedAt(Date.now());
+        if (initialGame) {
+          setSelectedDateTab(todayGame ? TODAY_TAB : initialGame.date);
+          selectGame(initialGame);
+        }
       } catch {
         if (!cancelled) {
-          setApiError("Live API unavailable. Showing fallback sample data.");
+          setGames((current) => (current.length > 0 ? current : GAMES));
+          setUsingSampleData(true);
+          if (GAMES[0]) {
+            setSelectedDateTab(GAMES[0].date);
+            selectGame(GAMES[0]);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -205,7 +240,52 @@ export function BoxScoreDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [todayLabel]);
+  }, [todayLabel, scoreboardRequest, selectGame]);
+
+  // Apply a /game/:id URL (first load, or back/forward navigation). Games
+  // outside the loaded scoreboard window are fetched individually.
+  useEffect(() => {
+    const routeGameId = route.gameId;
+    if (!routeGameId || routeGameId === appliedRouteGameIdRef.current || loadingGames) {
+      return;
+    }
+
+    const applyGame = (target: Game) => {
+      appliedRouteGameIdRef.current = target.id;
+      setSelectedDateTab(target.date === todayLabel ? TODAY_TAB : target.date);
+      selectGame(target);
+    };
+
+    const existing = games.find((item) => item.id === routeGameId);
+    if (existing) {
+      applyGame(existing);
+      return;
+    }
+
+    let cancelled = false;
+    appliedRouteGameIdRef.current = routeGameId;
+
+    fetchGameById(routeGameId)
+      .then((fetched) => {
+        if (cancelled) {
+          return;
+        }
+
+        setGames((current) =>
+          current.some((item) => item.id === fetched.id) ? current : [...current, fetched],
+        );
+        applyGame(fetched);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDetailsError("That game couldn't be found.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [route.gameId, games, loadingGames, todayLabel, selectGame]);
 
   useEffect(() => {
     let cancelled = false;
@@ -243,29 +323,61 @@ export function BoxScoreDashboard() {
   }, []);
 
   useEffect(() => {
-    if (availableDateTabs.length === 0) {
-      return;
-    }
-
     if (!availableDateTabs.includes(selectedDateTab)) {
       setSelectedDateTab(availableDateTabs[0]);
     }
   }, [availableDateTabs, selectedDateTab]);
 
-  const hasBoxscoreData = useMemo(() => {
-    if (!game) {
-      return false;
+  // Keep today's scoreboard fresh while games are live or about to start.
+  const todayHasLiveGame = gamesForToday.some((item) => item.statusState === "in");
+  const todayHasPendingGame = gamesForToday.some((item) => item.statusState === "pre");
+
+  useEffect(() => {
+    if (usingSampleData || (!todayHasLiveGame && !todayHasPendingGame)) {
+      return;
     }
 
-      return gameHasBoxscoreData(game);
-  }, [game]);
+    let cancelled = false;
+    const interval = todayHasLiveGame ? LIVE_REFRESH_INTERVAL_MS : PREGAME_REFRESH_INTERVAL_MS;
 
+    const refresh = async () => {
+      if (document.hidden) {
+        return;
+      }
+
+      try {
+        const fresh = await fetchScoreboardGamesForDate(new Date());
+        if (cancelled) {
+          return;
+        }
+
+        setGames((current) => mergeScoreboardUpdate(current, fresh));
+        setLastUpdatedAt(Date.now());
+        setRefreshFailed(false);
+      } catch {
+        if (!cancelled) {
+          setRefreshFailed(true);
+        }
+      }
+    };
+
+    const intervalId = window.setInterval(() => void refresh(), interval);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [usingSampleData, todayHasLiveGame, todayHasPendingGame]);
+
+  const hasBoxscoreData = game ? gameHasBoxscoreData(game) : false;
   const isPregame = game?.statusState === "pre";
   const isLiveGame = game?.statusState === "in";
   const lastDetailsFetchAt = game ? detailsFetchedAtByGame[game.id] ?? 0 : 0;
 
   useEffect(() => {
-    if (!game || isPregame || (!isLiveGame && hasBoxscoreData)) {
+    if (!game || usingSampleData || isPregame || (!isLiveGame && hasBoxscoreData)) {
       return;
     }
 
@@ -290,15 +402,11 @@ export function BoxScoreDashboard() {
             return mergeGameWithDetails(existingGame, details);
           }),
         );
-        setApiError(null);
+        setDetailsError(null);
+        setLastUpdatedAt(Date.now());
       } catch {
         if (!cancelled) {
-          setApiError((currentError) => {
-            return (
-              currentError ??
-              "Could not load full box score for the selected game from the API."
-            );
-          });
+          setDetailsError("Couldn't load the full box score for this game.");
         }
       } finally {
         if (!cancelled) {
@@ -331,10 +439,10 @@ export function BoxScoreDashboard() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [game, hasBoxscoreData, isPregame, isLiveGame, lastDetailsFetchAt]);
+  }, [game, usingSampleData, hasBoxscoreData, isPregame, isLiveGame, lastDetailsFetchAt]);
 
   useEffect(() => {
-    if (activeViewTab !== VIEW_TAB_LEADERBOARD || !selectedDateLabel) {
+    if (activeView !== "leaderboard" || !selectedDateLabel) {
       return;
     }
 
@@ -398,7 +506,22 @@ export function BoxScoreDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [activeViewTab, selectedDateLabel]);
+  }, [activeView, selectedDateLabel]);
+
+  useEffect(() => {
+    if (activeView === "boxscores" && game && game.statusState !== "pre") {
+      document.title = `${game.away} ${game.score[game.away] ?? 0} – ${game.score[game.home] ?? 0} ${game.home} · whowon`;
+      return;
+    }
+
+    const viewTitles: Record<View, string> = {
+      boxscores: "Box Scores",
+      leaderboard: "Leaderboard",
+      standings: "Standings",
+      playoffs: "Playoff Bracket",
+    };
+    document.title = `${viewTitles[activeView]} · whowon`;
+  }, [activeView, game]);
 
   const players = useMemo(() => {
     if (!game) {
@@ -412,23 +535,14 @@ export function BoxScoreDashboard() {
     [players, sortCol, sortDir],
   );
 
-  const leaderboardIsLoading = loadingLeaderboard;
-
-  const accent = game ? getAccent(activeTeam, dark, game.teamColors?.[activeTeam]) : "#e8401a";
-  const homeScore = game ? (game.score[game.home] ?? 0) : 0;
-  const awayScore = game ? (game.score[game.away] ?? 0) : 0;
-  const winTeam = game ? (homeScore > awayScore ? game.home : game.away) : "";
+  const activePalette = game
+    ? getTeamPalette(activeTeam, game.teamColors?.[activeTeam])
+    : null;
 
   const handleGameSelect = (selected: Game) => {
-    setSelectedGameId(selected.id);
-    if (selectedDateTab !== TODAY_TAB) {
-      setSelectedDateTab(selected.date);
-    }
-    setActiveTeam(selected.home);
-    setSortCol("pts");
-    setSortDir(-1);
-    setAnimKey((key) => key + 1);
-    setApiError(null);
+    appliedRouteGameIdRef.current = selected.id;
+    selectGame(selected);
+    navigate({ view: "boxscores", gameId: selected.id });
   };
 
   const handleTeamSwitch = (team: TeamCode) => {
@@ -466,189 +580,143 @@ export function BoxScoreDashboard() {
       return;
     }
 
-    setSelectedGameId(nextGame.id);
-    setActiveTeam(nextGame.home);
-    setSortCol("pts");
-    setSortDir(-1);
-    setAnimKey((key) => key + 1);
-    setApiError(null);
+    selectGame(nextGame);
+    if (activeView === "boxscores" && route.gameId) {
+      appliedRouteGameIdRef.current = nextGame.id;
+      navigate({ view: "boxscores", gameId: nextGame.id }, { replace: true });
+    }
   };
 
-  const scheduleMessage =
-    isPregame && game.statusText
-      ? `${game.statusText} - box score will appear at tip-off.`
-      : isPregame
-        ? "Game has not started yet. Box score will appear at tip-off."
-        : isLiveGame && !hasBoxscoreData
-          ? "Live game in progress. Box score is populating."
-          : null;
+  const handleSelectView = (view: View) => {
+    if (view === "boxscores" && game) {
+      navigate({ view, gameId: route.gameId ? game.id : undefined });
+      return;
+    }
 
-  const statusMessage = loadingGames
-    ? "Loading live NBA games..."
-    : loadingDetails
-      ? "Loading live box score..."
-      : apiError ?? scheduleMessage;
+    navigate({ view });
+  };
+
+  const showGameSelector = activeView === "boxscores" || activeView === "leaderboard";
+  const boxScoreEmptyMessage =
+    isLiveGame && !hasBoxscoreData
+      ? "Live game in progress. Box score is populating."
+      : detailsError;
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: theme.pageBg,
-        fontFamily: "'Barlow Condensed', sans-serif",
-        color: theme.textPrimary,
-        ...TRANSITION_STYLE,
-      }}
-    >
-      <link
-        href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&display=swap"
-        rel="stylesheet"
-      />
-
+    <div className={styles.app}>
       <Header
-        activeTab={activeViewTab}
+        activeTab={activeView}
         dark={dark}
-        onSelectTab={setActiveViewTab}
-        onToggleTheme={() => setDark((value) => !value)}
-        theme={theme}
-        transitionStyle={TRANSITION_STYLE}
+        onSelectTab={handleSelectView}
+        onToggleTheme={toggleTheme}
       />
 
-      <div className="dashboard-content" style={{ padding: "0 clamp(10px, 3.8vw, 28px) 32px" }}>
-        {(activeViewTab === VIEW_TAB_BOXSCORES ||
-          activeViewTab === VIEW_TAB_LEADERBOARD) &&
-          availableDateTabs.length > 0 && (
-            <GameSelector
-              games={gamesForSelectedDate}
-              availableDates={availableDateTabs}
-              selectedDate={selectedDateTab}
-              showUpcomingGames={selectedDateTab === TODAY_TAB}
-              selectedGameId={game?.id ?? ""}
-              dark={dark}
-              theme={theme}
-              transitionStyle={TRANSITION_STYLE}
-              onSelectDate={handleDateSelect}
-              onSelectGame={handleGameSelect}
-            />
-          )}
+      {showGameSelector && (
+        <GameSelector
+          games={gamesForSelectedDate}
+          availableDates={availableDateTabs}
+          selectedDate={selectedDateTab}
+          selectedGameId={game?.id ?? ""}
+          showGames={activeView === "boxscores"}
+          loading={loadingGames}
+          onSelectDate={handleDateSelect}
+          onSelectGame={handleGameSelect}
+        />
+      )}
 
-        {activeViewTab === VIEW_TAB_BOXSCORES && (
+      <main className={styles.main}>
+        <StatusBar
+          usingSampleData={usingSampleData}
+          refreshFailed={refreshFailed}
+          lastUpdatedAt={lastUpdatedAt}
+          live={todayHasLiveGame && !usingSampleData}
+          onRetry={() => setScoreboardRequest((count) => count + 1)}
+        />
+
+        {activeView === "boxscores" && (
           <>
-            {availableDateTabs.length === 0 && (
-              <div
-                style={{
-                  padding: "12px 0",
-                  fontSize: "12px",
-                  letterSpacing: "0.6px",
-                  color: theme.textMuted,
-                  textTransform: "uppercase",
-                  fontWeight: 600,
-                }}
-              >
-                No completed games found in the current range.
+            {loadingGames && !game && (
+              <div aria-hidden="true">
+                <span className="skeleton" style={{ height: 210, borderRadius: 12 }} />
+                <span className="skeleton" style={{ height: 380, marginTop: 20, borderRadius: 10 }} />
               </div>
             )}
 
-            {statusMessage && (
-              <div
-                style={{
-                  padding: "10px 0",
-                  fontSize: "12px",
-                  letterSpacing: "0.6px",
-                  color: theme.textMuted,
-                  textTransform: "uppercase",
-                  fontWeight: 600,
-                }}
-              >
-                {statusMessage}
-              </div>
+            {!loadingGames && !game && (
+              <div className={styles.emptyCard}>No games on this date.</div>
             )}
 
             {game && (
-              <>
-                <QuarterBreakdown
-                  game={game}
-                  winTeam={winTeam}
-                  dark={dark}
-                  theme={theme}
-                  transitionStyle={TRANSITION_STYLE}
-                />
+              <div className={styles.gameView}>
+                <Scorebug game={game} />
 
-                <TeamTabs
-                  game={game}
-                  activeTeam={activeTeam}
-                  dark={dark}
-                  theme={theme}
-                  transitionStyle={TRANSITION_STYLE}
-                  onSwitchTeam={handleTeamSwitch}
-                />
-
-                <PlayerStatsTable
-                  gameId={game.id}
-                  activeTeam={activeTeam}
-                  animKey={animKey}
-                  sortedPlayers={sortedPlayers}
-                  sortCol={sortCol}
-                  sortDir={sortDir}
-                  accent={accent}
-                  theme={theme}
-                  transitionStyle={TRANSITION_STYLE}
-                  onSort={handleSort}
-                />
-              </>
-            )}
-          </>
-        )}
-
-        {activeViewTab === VIEW_TAB_LEADERBOARD && (
-          <>
-            {availableDateTabs.length === 0 && (
-              <div
-                style={{
-                  padding: "12px 0",
-                  fontSize: "12px",
-                  letterSpacing: "0.6px",
-                  color: theme.textMuted,
-                  textTransform: "uppercase",
-                  fontWeight: 600,
-                }}
-              >
-                No games found in the current range.
+                {isPregame ? (
+                  <div className={styles.emptyCard}>
+                    Box score appears at tip-off
+                    {game.statusText ? <span>{game.statusText}</span> : null}
+                  </div>
+                ) : (
+                  <>
+                    <TeamTabs game={game} activeTeam={activeTeam} onSwitchTeam={handleTeamSwitch} />
+                    {loadingDetails && sortedPlayers.length === 0 ? (
+                      <span
+                        className="skeleton"
+                        style={{ height: 380, borderRadius: "0 0 10px 10px" }}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <PlayerStatsTable
+                        gameId={game.id}
+                        activeTeam={activeTeam}
+                        animKey={animKey}
+                        sortedPlayers={sortedPlayers}
+                        sortCol={sortCol}
+                        sortDir={sortDir}
+                        teamColor={activePalette?.primary ?? "#e8401a"}
+                        accent={activePalette ? getReadableAccent(activePalette, dark) : "#e8401a"}
+                        emptyMessage={boxScoreEmptyMessage}
+                        onSort={handleSort}
+                      />
+                    )}
+                  </>
+                )}
               </div>
             )}
-            <TopPerformersLeaderboard
-              limit={TOP_PERFORMERS_LIMIT}
-              dateLabel={selectedDateLabel}
-              performers={leaderboardPerformers}
-              isLoading={leaderboardIsLoading}
-              error={leaderboardError}
-              theme={theme}
-              transitionStyle={TRANSITION_STYLE}
-            />
           </>
         )}
 
-        {activeViewTab === VIEW_TAB_STANDINGS && (
+        {activeView === "leaderboard" && (
+          <TopPerformersLeaderboard
+            limit={TOP_PERFORMERS_LIMIT}
+            dateLabel={selectedDateLabel}
+            performers={leaderboardPerformers}
+            isLoading={loadingLeaderboard}
+            error={leaderboardError}
+          />
+        )}
+
+        {activeView === "standings" && (
           <ConferenceStandings
             eastern={conferenceStandings.eastern}
             western={conferenceStandings.western}
             loading={loadingStandings}
             error={standingsError}
-            theme={theme}
-            transitionStyle={TRANSITION_STYLE}
           />
         )}
 
-        {activeViewTab === VIEW_TAB_PLAYOFFS && (
-          <NBAPlayoffBracket
-            dark={dark}
-            theme={theme}
-            transitionStyle={TRANSITION_STYLE}
-            standings={conferenceStandings}
-            loading={loadingStandings}
-            error={standingsError}
-          />
+        {activeView === "playoffs" && (
+          <div className={styles.bracket}>
+            <NBAPlayoffBracket
+              dark={dark}
+              theme={THEME}
+              transitionStyle={TRANSITION_STYLE}
+              standings={conferenceStandings}
+              loading={loadingStandings}
+              error={standingsError}
+            />
+          </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

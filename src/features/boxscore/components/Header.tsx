@@ -1,190 +1,127 @@
-import type { CSSProperties } from "react";
+import type { ReactNode } from "react";
 
-import type { Theme } from "../types";
+import type { View } from "../hooks/useRoute";
+import styles from "./Header.module.css";
 
-export type TopNavTab = "boxscores" | "leaderboard" | "standings" | "playoffs";
+export type TopNavTab = View;
 
 interface HeaderProps {
   activeTab: TopNavTab;
   dark: boolean;
   onSelectTab: (tab: TopNavTab) => void;
   onToggleTheme: () => void;
-  theme: Theme;
-  transitionStyle: CSSProperties;
 }
 
-export function Header({
-  activeTab,
-  dark,
-  onSelectTab,
-  onToggleTheme,
-  theme,
-  transitionStyle,
-}: HeaderProps) {
-  const tabButtonBase = {
-    borderRadius: "999px",
-    padding: "5px 10px",
-    fontSize: "11px",
-    letterSpacing: "0.8px",
-    fontWeight: 700,
-    textTransform: "uppercase",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    flexShrink: 0,
-  } as const;
+interface NavItem {
+  tab: TopNavTab;
+  label: string;
+  shortLabel: string;
+  icon: ReactNode;
+}
 
+const NAV_ITEMS: NavItem[] = [
+  {
+    tab: "boxscores",
+    label: "Box Scores",
+    shortLabel: "Scores",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="M12 5v14M3 12h18" />
+      </svg>
+    ),
+  },
+  {
+    tab: "leaderboard",
+    label: "Leaderboard",
+    shortLabel: "Leaders",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 20V11M12 20V5M19 20v-6" />
+      </svg>
+    ),
+  },
+  {
+    tab: "standings",
+    label: "Standings",
+    shortLabel: "Standings",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 6h16M4 12h16M4 18h10" />
+      </svg>
+    ),
+  },
+  {
+    tab: "playoffs",
+    label: "Playoff Bracket",
+    shortLabel: "Bracket",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 5h5v6h5M3 19h5v-6M13 12h8" />
+      </svg>
+    ),
+  },
+];
+
+export function Header({ activeTab, dark, onSelectTab, onToggleTheme }: HeaderProps) {
   return (
-    <div
-      className="dashboard-header"
-      style={{
-        background: theme.headerBg,
-        borderBottom: `1px solid ${theme.border}`,
-        padding: "14px clamp(12px, 4vw, 28px)",
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        flexWrap: "wrap",
-        ...transitionStyle,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
-        <div
-          style={{
-            background: "#e8401a",
-            color: "#fff",
-            fontWeight: 900,
-            fontSize: "12px",
-            letterSpacing: "3px",
-            padding: "4px 10px",
-            flexShrink: 0,
-            whiteSpace: "nowrap",
-          }}
-        >
-          NBA
-        </div>
-        <span
-          className="dashboard-header-title"
-          style={{
-            fontSize: "clamp(16px, 2.5vw, 20px)",
-            fontWeight: 800,
-            letterSpacing: "clamp(1px, 0.4vw, 2px)",
-            textTransform: "uppercase",
-            whiteSpace: "nowrap",
-          }}
-        >
-          NBA Dashboard
-        </span>
-      </div>
-      <div
-        className="dashboard-header-tabs scrollbar-hidden"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          marginLeft: "8px",
-          minWidth: 0,
-          overflowX: "auto",
-          paddingBottom: "2px",
-          flex: "1 1 auto",
-        }}
-      >
-        <button
-          onClick={() => onSelectTab("boxscores")}
-          style={{
-            border: `1px solid ${activeTab === "boxscores" ? "#e8401a" : theme.border}`,
-            background: activeTab === "boxscores" ? "#e8401a" : theme.cardBg,
-            color: activeTab === "boxscores" ? "#fff" : theme.textSecond,
-            ...tabButtonBase,
-          }}
-        >
-          Box Scores
-        </button>
-        <button
-          onClick={() => onSelectTab("leaderboard")}
-          style={{
-            border: `1px solid ${activeTab === "leaderboard" ? "#e8401a" : theme.border}`,
-            background: activeTab === "leaderboard" ? "#e8401a" : theme.cardBg,
-            color: activeTab === "leaderboard" ? "#fff" : theme.textSecond,
-            ...tabButtonBase,
-          }}
-        >
-          Leaderboard
-        </button>
-        <button
-          onClick={() => onSelectTab("standings")}
-          style={{
-            border: `1px solid ${activeTab === "standings" ? "#e8401a" : theme.border}`,
-            background: activeTab === "standings" ? "#e8401a" : theme.cardBg,
-            color: activeTab === "standings" ? "#fff" : theme.textSecond,
-            ...tabButtonBase,
-          }}
-        >
-          Conference Standings
-        </button>
-        <button
-          onClick={() => onSelectTab("playoffs")}
-          style={{
-            border: `1px solid ${activeTab === "playoffs" ? "#e8401a" : theme.border}`,
-            background: activeTab === "playoffs" ? "#e8401a" : theme.cardBg,
-            color: activeTab === "playoffs" ? "#fff" : theme.textSecond,
-            ...tabButtonBase,
-          }}
-        >
-          Playoff Bracket
-        </button>
-      </div>
-      <div
-        className="dashboard-header-theme"
-        style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}
-      >
-        <span
-          className="dashboard-theme-label"
-          style={{
-            fontSize: "11px",
-            color: theme.toggleLabel,
-            fontWeight: 700,
-            letterSpacing: "1px",
-            textTransform: "uppercase",
-          }}
-        >
-          {dark ? "Dark" : "Light"}
-        </span>
-        <button
-          onClick={onToggleTheme}
-          aria-label="Toggle theme"
-          style={{
-            position: "relative",
-            width: "44px",
-            height: "24px",
-            borderRadius: "12px",
-            border: `1px solid ${theme.border}`,
-            background: theme.toggleBg,
-            cursor: "pointer",
-            transition: "background 0.25s",
-            padding: 0,
-            flexShrink: 0,
-          }}
-        >
-          <span
-            style={{
-              position: "absolute",
-              top: "3px",
-              left: dark ? "22px" : "3px",
-              width: "16px",
-              height: "16px",
-              borderRadius: "50%",
-              background: dark ? "#FDB927" : "#552583",
-              transition: "left 0.22s, background 0.22s",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "9px",
-            }}
+    <>
+      <header className={styles.header}>
+        <div className={styles.inner}>
+          <button className={styles.brand} onClick={() => onSelectTab("boxscores")}>
+            <span className={styles.brandBadge}>NBA</span>
+            <span className={styles.brandTitle}>
+              Who<span className={styles.brandAccent}>Won</span>
+            </span>
+          </button>
+
+          <nav className={styles.tabs} aria-label="Sections">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.tab}
+                className={styles.tab}
+                aria-current={activeTab === item.tab ? "page" : undefined}
+                onClick={() => onSelectTab(item.tab)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <button
+            className={styles.themeToggle}
+            onClick={onToggleTheme}
+            aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+            title={dark ? "Switch to light theme" : "Switch to dark theme"}
           >
-            {dark ? "🌙" : "☀️"}
-          </span>
-        </button>
-      </div>
-    </div>
+            {dark ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
+              </svg>
+            )}
+          </button>
+        </div>
+        <div className={styles.stripe} />
+      </header>
+
+      <nav className={styles.bottomNav} aria-label="Sections">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.tab}
+            className={styles.bottomTab}
+            aria-current={activeTab === item.tab ? "page" : undefined}
+            onClick={() => onSelectTab(item.tab)}
+          >
+            {item.icon}
+            <span>{item.shortLabel}</span>
+          </button>
+        ))}
+      </nav>
+    </>
   );
 }

@@ -1,0 +1,187 @@
+.wrap {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.22s, border-color 0.22s;
+}
+
+.dates {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 12px clamp(16px, 4vw, 28px) 4px;
+}
+
+.dateChip {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  padding: 6px 12px 5px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.dateChip:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.dateChip[aria-selected="true"] {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--card-bg);
+}
+
+.rowShell {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding: 10px clamp(16px, 4vw, 28px) 14px;
+}
+
+.arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: var(--shadow);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 0 2px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.arrow:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.arrowLeft {
+  left: 4px;
+}
+
+.arrowRight {
+  right: 4px;
+}
+
+.card {
+  flex: 0 0 auto;
+  width: 176px;
+  scroll-snap-align: start;
+  text-align: left;
+  background: var(--page-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s, background 0.22s;
+}
+
+.card:hover {
+  transform: translateY(-1px);
+  border-color: var(--text-dim);
+}
+
+.card[aria-pressed="true"] {
+  background: var(--card-bg);
+  border-color: var(--text-primary);
+  box-shadow: var(--shadow), inset 0 3px 0 var(--brand);
+}
+
+.card[data-live] {
+  border-color: rgba(255, 59, 48, 0.55);
+}
+
+.cardStatus {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.teamRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  transition: opacity 0.15s;
+}
+
+.teamRow[data-dimmed] {
+  opacity: 0.45;
+}
+
+.teamBar {
+  width: 4px;
+  align-self: stretch;
+  margin: 3px 0;
+  border-radius: 2px;
+  background: var(--team-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-dim) 35%, transparent);
+}
+
+.teamCode {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.6px;
+  color: var(--text-primary);
+}
+
+.teamRecord {
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.teamScore {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 22px;
+  color: var(--text-primary);
+}
+
+@media (max-width: 760px) {
+  .arrow {
+    display: none;
+  }
+
+  .card {
+    width: 156px;
+  }
+
+  .teamRecord {
+    display: none;
+  }
+}

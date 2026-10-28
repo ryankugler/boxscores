@@ -4,8 +4,24 @@
     <meta charset="UTF-8" />
     <link type="image/png" sizes="32x32" rel="icon" href="https://img.icons8.com/cotton/64/basketball--v1.png">
     <!-- Basketball icon by Icons8 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0c10" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <title>whowon</title>
+    <script>
+      // Apply a saved light/dark override before first paint to avoid a theme flash.
+      try {
+        var savedTheme = localStorage.getItem("whowon-theme");
+        if (savedTheme === "light" || savedTheme === "dark") {
+          document.documentElement.dataset.theme = savedTheme;
+        }
+      } catch (error) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
