@@ -1,0 +1,241 @@
+.panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--team-color);
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  transition: background 0.22s, border-color 0.22s;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.table thead tr {
+  background: var(--team-color);
+  color: var(--team-ink);
+}
+
+.table th {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.playerHead {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--team-color);
+  text-align: left;
+  padding: 10px 14px;
+  min-width: 190px;
+}
+
+.posHead {
+  padding: 10px 6px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.statHead {
+  padding: 0;
+}
+
+.statHead button {
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  padding: 10px 10px;
+  cursor: pointer;
+  opacity: 0.78;
+  white-space: nowrap;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.statHead button:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.statHead button[data-active] {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.sortArrow {
+  display: inline-block;
+  width: 10px;
+  margin-left: 3px;
+  font-size: 8px;
+  vertical-align: 2px;
+}
+
+.body tr {
+  border-bottom: 1px solid var(--divider);
+  animation: row-in 0.32s ease-out both;
+  animation-delay: var(--row-delay);
+}
+
+.body tr:last-child {
+  border-bottom: none;
+}
+
+.body tr:hover td {
+  background: var(--hover-bg);
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.body td {
+  background: var(--card-bg);
+  transition: background 0.1s;
+}
+
+.playerCell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding: 7px 14px;
+  box-shadow: 1px 0 0 var(--divider);
+}
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.playerName {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.posCell {
+  text-align: center;
+  padding: 7px 6px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--pos-color);
+}
+
+.ratioCell,
+.numCell {
+  text-align: center;
+  padding: 7px 10px;
+  color: var(--text-second);
+  white-space: nowrap;
+}
+
+.ratioCell {
+  font-size: 14px;
+  color: var(--text-mono);
+}
+
+.numCell {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.body td[data-zero] {
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
+.body td[data-sorted] {
+  background: color-mix(in srgb, var(--accent) 7%, var(--card-bg));
+}
+
+.body tr:hover td[data-sorted] {
+  background: color-mix(in srgb, var(--accent) 12%, var(--hover-bg));
+}
+
+.numCell[data-big] {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.numCell[data-leader] {
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.numCell[data-warn] {
+  color: var(--to-warn);
+  font-weight: 800;
+}
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .playerHead {
+    min-width: 0;
+    padding: 9px 10px;
+  }
+
+  .playerCell {
+    padding: 6px 10px;
+  }
+
+  .playerName {
+    max-width: 104px;
+    font-size: 14px;
+  }
+
+  .avatar {
+    display: none;
+  }
+
+  .ratioCell,
+  .numCell {
+    padding: 6px 7px;
+  }
+
+  .numCell {
+    font-size: 16px;
+  }
+
+  .statHead button {
+    padding: 9px 7px;
+  }
+}

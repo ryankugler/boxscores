@@ -96,9 +96,11 @@ export interface Game {
   awayTeam: string;
   score: Record<string, number>;
   periods: Record<Quarter, Record<string, number>>;
+  overtimes?: Array<Record<string, number>>;
   players: Record<string, PlayerStats[]>;
   teamLogos?: Record<string, string>;
   teamColors?: Record<string, TeamColors>;
+  records?: Record<string, string>;
   statusState?: "pre" | "in" | "post" | string;
   statusText?: string;
 }

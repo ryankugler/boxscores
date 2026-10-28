@@ -69,6 +69,7 @@ interface EspnEvent {
 }
 
 interface EspnCompetition {
+  date?: string;
   competitors?: EspnCompetitor[];
   status?: {
     type?: {
@@ -83,6 +84,8 @@ interface EspnCompetitor {
   score?: string;
   team?: EspnTeam;
   linescores?: Array<{ value?: number; displayValue?: string }>;
+  records?: Array<{ summary?: string }>;
+  record?: Array<{ summary?: string }>;
 }
 
 interface EspnTeam {
@@ -129,6 +132,7 @@ interface TeamDescriptor {
 interface GameDetails {
   score: Record<string, number>;
   periods: Record<Quarter, Record<string, number>>;
+  overtimes: Array<Record<string, number>>;
   players: Record<string, PlayerStats[]>;
   teamLogos: Record<string, string>;
   teamColors: Record<string, TeamColors>;
@@ -255,15 +259,41 @@ export async function fetchConferenceStandings(): Promise<ConferenceStandings> {
   return splitStandingsByConference(allChildrenEntries);
 }
 
-export async function fetchGameDetails(eventId: string): Promise<GameDetails> {
-  const url = `${ESPN_NBA_API_BASE}/summary?event=${eventId}`;
+async function fetchSummary(eventId: string): Promise<EspnSummaryResponse> {
+  const url = `${ESPN_NBA_API_BASE}/summary?event=${encodeURIComponent(eventId)}`;
 
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Summary request failed with status ${response.status}`);
   }
 
-  const payload = (await response.json()) as EspnSummaryResponse;
+  return (await response.json()) as EspnSummaryResponse;
+}
+
+// Loads a single game by ESPN event id, for deep links to games outside the
+// recent scoreboard window.
+export async function fetchGameById(eventId: string): Promise<Game> {
+  const payload = await fetchSummary(eventId);
+  const competition = payload.header?.competitions?.[0];
+  const game = competition
+    ? parseEventGame({ id: eventId, date: competition.date, competitions: [competition] })
+    : null;
+
+  if (!game) {
+    throw new Error("Missing competition data in summary response");
+  }
+
+  return {
+    ...game,
+    players: {
+      ...game.players,
+      ...parsePlayers(payload.boxscore?.players ?? []),
+    },
+  };
+}
+
+export async function fetchGameDetails(eventId: string): Promise<GameDetails> {
+  const payload = await fetchSummary(eventId);
   const competition = payload.header?.competitions?.[0];
   if (!competition) {
     throw new Error("Missing competition data in summary response");
@@ -301,6 +331,7 @@ export async function fetchGameDetails(eventId: string): Promise<GameDetails> {
   return {
     score,
     periods,
+    overtimes: parseOvertimes(homeTeam.code, awayTeam.code, homeCompetitor, awayCompetitor),
     players,
     teamLogos,
     teamColors,
@@ -341,15 +372,33 @@ function parseEventGame(event: EspnEvent): Game | null {
       [awayTeam.code]: parseScore(awayCompetitor.score),
     },
     periods: parsePeriods(homeTeam.code, awayTeam.code, homeCompetitor, awayCompetitor),
+    overtimes: parseOvertimes(homeTeam.code, awayTeam.code, homeCompetitor, awayCompetitor),
     players: {
       [homeTeam.code]: [],
       [awayTeam.code]: [],
     },
     teamLogos: mapTeamLogos([homeTeam, awayTeam]),
     teamColors: mapTeamColors([homeTeam, awayTeam]),
+    records: mapRecords([
+      [homeTeam.code, homeCompetitor],
+      [awayTeam.code, awayCompetitor],
+    ]),
     statusState: competition.status?.type?.state,
     statusText: competition.status?.type?.shortDetail,
   };
+}
+
+function mapRecords(entries: Array<[TeamCode, EspnCompetitor]>): Record<string, string> {
+  const records: Record<string, string> = {};
+
+  entries.forEach(([code, competitor]) => {
+    const summary = (competitor.records ?? competitor.record)?.[0]?.summary;
+    if (summary) {
+      records[code] = summary;
+    }
+  });
+
+  return records;
 }
 
 function parseTeamDescriptor(team: EspnTeam): TeamDescriptor {
@@ -536,6 +585,22 @@ function parsePeriods(
   });
 
   return periods;
+}
+
+function parseOvertimes(
+  home: TeamCode,
+  away: TeamCode,
+  homeCompetitor: EspnCompetitor,
+  awayCompetitor: EspnCompetitor,
+): Array<Record<string, number>> {
+  const homeLines = (homeCompetitor.linescores ?? []).slice(4);
+  const awayLines = (awayCompetitor.linescores ?? []).slice(4);
+  const count = Math.max(homeLines.length, awayLines.length);
+
+  return Array.from({ length: count }, (_, index) => ({
+    [home]: homeLines[index] ? parseLineScore(homeLines[index]) : 0,
+    [away]: awayLines[index] ? parseLineScore(awayLines[index]) : 0,
+  }));
 }
 
 function parseLineScore(line: { value?: number; displayValue?: string }): number {

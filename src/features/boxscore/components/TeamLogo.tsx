@@ -8,15 +8,17 @@ interface TeamLogoProps {
   logoUrl?: string;
   size?: number;
   style?: CSSProperties;
+  className?: string;
 }
 
-export function TeamLogo({ abbr, logoUrl, size = 28, style }: TeamLogoProps) {
+export function TeamLogo({ abbr, logoUrl, size = 28, style, className }: TeamLogoProps) {
   const fallbackLogo = getTeamLogo(abbr);
   const src = getTeamLogo(abbr, logoUrl);
 
   if (!src) {
     return (
       <span
+        className={className}
         style={{
           width: size,
           height: size,
@@ -46,6 +48,7 @@ export function TeamLogo({ abbr, logoUrl, size = 28, style }: TeamLogoProps) {
     <img
       src={src}
       alt={abbr}
+      className={className}
       width={size}
       height={size}
       style={{ objectFit: "contain", display: "block", flexShrink: 0, ...style }}

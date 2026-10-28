@@ -1,0 +1,206 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  padding-top: 24px;
+}
+
+.message {
+  margin-top: 24px;
+  padding: 32px 16px;
+  text-align: center;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: background 0.22s, border-color 0.22s;
+}
+
+.title {
+  margin: 0;
+  padding: 12px 16px 10px;
+  background: var(--header-bg);
+  color: var(--header-ink);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 20px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  border-bottom: 3px solid var(--brand);
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  padding: 8px 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  background: var(--sub-header);
+}
+
+.teamHead {
+  text-align: left !important;
+  padding-left: 16px !important;
+}
+
+.table td {
+  padding: 7px 8px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--text-second);
+  border-top: 1px solid var(--divider);
+}
+
+.table tr[data-cutoff="playoff"] td {
+  border-bottom: 2px solid var(--text-dim);
+}
+
+.table tr[data-cutoff="playin"] td {
+  border-bottom: 2px dashed var(--text-dim);
+}
+
+.table tr[data-zone="out"] td {
+  opacity: 0.6;
+}
+
+.teamCell {
+  text-align: left !important;
+  padding-left: 0 !important;
+  box-shadow: inset 4px 0 0 var(--team-color);
+  white-space: nowrap;
+}
+
+.teamInner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.seed {
+  width: 24px;
+  height: 24px;
+  margin-left: 10px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+tr[data-zone="playoff"] .seed {
+  background: var(--text-primary);
+  color: var(--card-bg);
+}
+
+tr[data-zone="playin"] .seed {
+  box-shadow: inset 0 0 0 1.5px var(--text-dim);
+  color: var(--text-second);
+}
+
+.teamName {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.teamCode {
+  display: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.6px;
+  color: var(--text-primary);
+}
+
+.strong {
+  font-family: var(--font-display);
+  font-weight: 800 !important;
+  font-size: 18px !important;
+  color: var(--text-primary) !important;
+}
+
+.streak {
+  display: inline-block;
+  min-width: 34px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  background: color-mix(in srgb, var(--to-warn) 14%, transparent);
+  color: var(--to-warn);
+}
+
+.streak[data-win] {
+  background: color-mix(in srgb, #1fae5b 16%, transparent);
+  color: #1a9e52;
+}
+
+.legend {
+  display: flex;
+  gap: 18px;
+  padding: 12px 4px 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.legend span::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1.5px var(--text-dim);
+}
+
+.legend span[data-zone="playoff"]::before {
+  background: var(--text-primary);
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .teamName {
+    display: none;
+  }
+
+  .teamCode {
+    display: inline;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

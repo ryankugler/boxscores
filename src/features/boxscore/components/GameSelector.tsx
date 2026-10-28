@@ -1,24 +1,18 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type MutableRefObject,
-} from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
-import { getAccent } from "../data/constants";
-import type { Game, Theme } from "../types";
+import { getMatchupColors, getTeamPalette } from "../color";
+import type { Game } from "../types";
+import { AnimatedScore } from "./AnimatedScore";
+import styles from "./GameSelector.module.css";
 import { TeamLogo } from "./TeamLogo";
 
 interface GameSelectorProps {
   games: Game[];
   availableDates: string[];
   selectedDate: string;
-  showUpcomingGames: boolean;
   selectedGameId: string;
-  dark: boolean;
-  theme: Theme;
-  transitionStyle: CSSProperties;
+  showGames: boolean;
+  loading: boolean;
   onSelectDate: (date: string) => void;
   onSelectGame: (game: Game) => void;
 }
@@ -33,7 +27,8 @@ const DEFAULT_SCROLL_CONTROLS: ScrollControls = {
   canScrollRight: false,
 };
 
-const SCROLL_STEP_PX = 320;
+const SCROLL_STEP_PX = 480;
+const SKELETON_CARD_COUNT = 5;
 
 function getScrollControls(node: HTMLDivElement | null): ScrollControls {
   if (!node) {
@@ -48,334 +43,213 @@ function getScrollControls(node: HTMLDivElement | null): ScrollControls {
   };
 }
 
+// Live games first, then finals, then upcoming games in tip-off order.
+function orderGames(games: Game[]): Game[] {
+  const rank = (game: Game) =>
+    game.statusState === "in" ? 0 : game.statusState === "pre" ? 2 : 1;
+
+  return [...games].sort((a, b) => rank(a) - rank(b));
+}
+
 export function GameSelector({
   games,
   availableDates,
   selectedDate,
-  showUpcomingGames,
   selectedGameId,
-  dark,
-  theme,
-  transitionStyle,
+  showGames,
+  loading,
   onSelectDate,
   onSelectGame,
 }: GameSelectorProps) {
-  const liveGames = games.filter((game) => game.statusState === "in");
-  const upcomingGames = games.filter((game) => game.statusState === "pre");
-  const primaryGames = games.filter((game) => game.statusState !== "pre");
-  const shouldSplitUpcomingSection =
-    showUpcomingGames && liveGames.length > 0 && upcomingGames.length > 0;
-  const visiblePrimaryGames = shouldSplitUpcomingSection ? primaryGames : games;
-
-  const primaryRowRef = useRef<HTMLDivElement | null>(null);
-  const upcomingRowRef = useRef<HTMLDivElement | null>(null);
-  const [primaryControls, setPrimaryControls] = useState<ScrollControls>(
-    DEFAULT_SCROLL_CONTROLS,
-  );
-  const [upcomingControls, setUpcomingControls] = useState<ScrollControls>(
-    DEFAULT_SCROLL_CONTROLS,
-  );
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [controls, setControls] = useState<ScrollControls>(DEFAULT_SCROLL_CONTROLS);
+  const orderedGames = orderGames(games);
 
   useEffect(() => {
-    const syncControls = () => {
-      setPrimaryControls(getScrollControls(primaryRowRef.current));
-      setUpcomingControls(getScrollControls(upcomingRowRef.current));
-    };
+    const syncControls = () => setControls(getScrollControls(rowRef.current));
 
     syncControls();
     window.addEventListener("resize", syncControls);
 
-    return () => {
-      window.removeEventListener("resize", syncControls);
-    };
-  }, [visiblePrimaryGames.length, upcomingGames.length]);
+    return () => window.removeEventListener("resize", syncControls);
+  }, [orderedGames.length, loading, showGames]);
 
-  const scrollRowBy = (row: HTMLDivElement | null, direction: 1 | -1) => {
-    if (!row) {
+  useEffect(() => {
+    const row = rowRef.current;
+    const selected = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!row || !selected) {
       return;
     }
 
-    row.scrollBy({
-      left: direction * SCROLL_STEP_PX,
-      behavior: "smooth",
-    });
+    const rowBox = row.getBoundingClientRect();
+    const cardBox = selected.getBoundingClientRect();
+    if (cardBox.left < rowBox.left || cardBox.right > rowBox.right) {
+      row.scrollBy({ left: cardBox.left - rowBox.left - 48, behavior: "smooth" });
+    }
+  }, [selectedGameId]);
+
+  const scrollRowBy = (direction: 1 | -1) => {
+    rowRef.current?.scrollBy({ left: direction * SCROLL_STEP_PX, behavior: "smooth" });
   };
 
-  const renderGameButtons = (list: Game[]) =>
-    list.map((game) => {
-      const isSelected = game.id === selectedGameId;
-      const isLive = game.statusState === "in";
-      const isPregame = game.statusState === "pre";
-      const isPostgame = game.statusState === "post";
-      const rawStatusText = game.statusText?.trim();
-      const sanitizedStatusText =
-        isLive && rawStatusText && /final/i.test(rawStatusText) ? null : rawStatusText;
-      const statusLabel = isLive
-        ? sanitizedStatusText ?? "In Progress"
-        : sanitizedStatusText ?? (isPostgame ? "Final" : game.date);
-      const homeScore = game.score[game.home] ?? 0;
-      const awayScore = game.score[game.away] ?? 0;
-      const winner =
-        homeScore === awayScore ? null : homeScore > awayScore ? game.home : game.away;
-      const homeAccent = getAccent(game.home, dark, game.teamColors?.[game.home]);
-      const awayAccent = getAccent(game.away, dark, game.teamColors?.[game.away]);
-
-      return (
-        <button
-          key={game.id}
-          onClick={() => onSelectGame(game)}
-          style={{
-            background: isSelected ? theme.cardBg : "transparent",
-            border: "none",
-            borderTop: `3px solid ${isSelected ? "#e8401a" : "transparent"}`,
-            padding: "12px 20px 16px",
-            cursor: "pointer",
-            minWidth: "200px",
-            flex: "0 0 auto",
-            transition: "background 0.15s",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "10px",
-              color: theme.textMuted,
-              letterSpacing: "2px",
-              textTransform: "uppercase",
-              marginBottom: "10px",
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "8px",
-            }}
-          >
-            <span>{statusLabel}</span>
-            {isLive && (
-              <span className="game-live-indicator">
-                <span className="game-live-dot" />
-                Live
-              </span>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "5px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-                <TeamLogo abbr={game.away} logoUrl={game.teamLogos?.[game.away]} size={22} />
-                <span
-                  style={{
-                    fontSize: "16px",
-                    fontWeight: 900,
-                    letterSpacing: "1px",
-                    color: winner === game.away ? theme.textPrimary : theme.scoreDim,
-                  }}
-                >
-                  {game.away}
-                </span>
-              </div>
-              <span
-                style={{
-                  fontSize: "22px",
-                  fontWeight: 900,
-                  lineHeight: 1,
-                  paddingLeft: "29px",
-                  color:
-                    winner === game.away
-                      ? isSelected
-                        ? awayAccent
-                        : theme.textPrimary
-                      : theme.scoreDim,
-                }}
-              >
-                {isPregame ? "--" : awayScore}
-              </span>
-            </div>
-            <div style={{ fontSize: "10px", color: theme.textMuted, fontWeight: 700 }}>@</div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "5px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-                <span
-                  style={{
-                    fontSize: "16px",
-                    fontWeight: 900,
-                    letterSpacing: "1px",
-                    color: winner === game.home ? theme.textPrimary : theme.scoreDim,
-                  }}
-                >
-                  {game.home}
-                </span>
-                <TeamLogo abbr={game.home} logoUrl={game.teamLogos?.[game.home]} size={22} />
-              </div>
-              <span
-                style={{
-                  fontSize: "22px",
-                  fontWeight: 900,
-                  lineHeight: 1,
-                  paddingRight: "29px",
-                  color:
-                    winner === game.home
-                      ? isSelected
-                        ? homeAccent
-                        : theme.textPrimary
-                      : theme.scoreDim,
-                }}
-              >
-                {isPregame ? "--" : homeScore}
-              </span>
-            </div>
-          </div>
-        </button>
-      );
-    });
-
-  const renderScrollableRow = (
-    list: Game[],
-    rowRef: MutableRefObject<HTMLDivElement | null>,
-    controls: ScrollControls,
-    setControls: (next: ScrollControls) => void,
-  ) => (
-    <div style={{ position: "relative" }}>
-      <button
-        aria-label="Scroll games left"
-        onClick={() => scrollRowBy(rowRef.current, -1)}
-        disabled={!controls.canScrollLeft}
-        style={{
-          position: "absolute",
-          left: "8px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          width: "24px",
-          height: "24px",
-          borderRadius: "999px",
-          border: `1px solid ${theme.border}`,
-          background: theme.cardBg,
-          color: theme.textPrimary,
-          cursor: controls.canScrollLeft ? "pointer" : "default",
-          opacity: controls.canScrollLeft ? 0.9 : 0.3,
-          zIndex: 2,
-          padding: 0,
-          lineHeight: 1,
-          fontSize: "15px",
-        }}
-      >
-        ‹
-      </button>
-
-      <div
-        ref={rowRef}
-        className="scrollbar-hidden"
-        onScroll={() => setControls(getScrollControls(rowRef.current))}
-        style={{
-          display: "flex",
-          overflowX: "auto",
-          overflowY: "hidden",
-          whiteSpace: "nowrap",
-          padding: "0 36px",
-          scrollBehavior: "smooth",
-        }}
-      >
-        {renderGameButtons(list)}
-      </div>
-
-      <button
-        aria-label="Scroll games right"
-        onClick={() => scrollRowBy(rowRef.current, 1)}
-        disabled={!controls.canScrollRight}
-        style={{
-          position: "absolute",
-          right: "8px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          width: "24px",
-          height: "24px",
-          borderRadius: "999px",
-          border: `1px solid ${theme.border}`,
-          background: theme.cardBg,
-          color: theme.textPrimary,
-          cursor: controls.canScrollRight ? "pointer" : "default",
-          opacity: controls.canScrollRight ? 0.9 : 0.3,
-          zIndex: 2,
-          padding: 0,
-          lineHeight: 1,
-          fontSize: "15px",
-        }}
-      >
-        ›
-      </button>
-    </div>
-  );
-
   return (
-    <div style={{ borderBottom: `1px solid ${theme.border}`, background: theme.pageBg, ...transitionStyle }}>
-      <div
-        className="scrollbar-hidden"
-        style={{
-          display: "flex",
-          gap: "8px",
-          overflowX: "auto",
-          padding: "10px 20px",
-          borderBottom: `1px solid ${theme.border}`,
-          background: theme.headerBg,
-        }}
-      >
-        {availableDates.map((date) => {
-          const isActive = selectedDate === date;
-
-          return (
-            <button
-              key={date}
-              onClick={() => onSelectDate(date)}
-              style={{
-                border: `1px solid ${isActive ? "#e8401a" : theme.border}`,
-                background: isActive ? theme.cardBg : theme.subHeader,
-                color: isActive ? theme.textPrimary : theme.textMuted,
-                borderRadius: "999px",
-                padding: "6px 10px",
-                fontSize: "11px",
-                fontWeight: 700,
-                letterSpacing: "0.8px",
-                textTransform: "uppercase",
-                whiteSpace: "nowrap",
-                cursor: "pointer",
-              }}
-            >
-              {date}
-            </button>
-          );
-        })}
+    <div className={styles.wrap}>
+      <div className={`${styles.dates} scrollbar-hidden`} role="tablist" aria-label="Game dates">
+        {availableDates.map((date) => (
+          <button
+            key={date}
+            role="tab"
+            aria-selected={selectedDate === date}
+            className={styles.dateChip}
+            onClick={() => onSelectDate(date)}
+          >
+            {formatDateChip(date)}
+          </button>
+        ))}
       </div>
 
-      {renderScrollableRow(
-        visiblePrimaryGames,
-        primaryRowRef,
-        primaryControls,
-        setPrimaryControls,
-      )}
-
-      {shouldSplitUpcomingSection && (
-        <div
-          style={{
-            borderTop: `1px solid ${theme.border}`,
-          }}
-        >
-          <div
-            style={{
-              padding: "6px 20px",
-              fontSize: "10px",
-              letterSpacing: "1.4px",
-              textTransform: "uppercase",
-              fontWeight: 700,
-              color: theme.textMuted,
-            }}
+      {showGames && (
+        <div className={styles.rowShell}>
+          <button
+            aria-label="Scroll games left"
+            className={`${styles.arrow} ${styles.arrowLeft}`}
+            onClick={() => scrollRowBy(-1)}
+            disabled={!controls.canScrollLeft}
           >
-            Upcoming Games
+            ‹
+          </button>
+
+          <div
+            ref={rowRef}
+            className={`${styles.row} scrollbar-hidden`}
+            onScroll={() => setControls(getScrollControls(rowRef.current))}
+          >
+            {loading && orderedGames.length === 0
+              ? Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
+                  <div key={index} className={styles.card} aria-hidden="true">
+                    <span className="skeleton" style={{ width: "60%", height: 10 }} />
+                    <span className="skeleton" style={{ width: "100%", height: 22, marginTop: 12 }} />
+                    <span className="skeleton" style={{ width: "100%", height: 22, marginTop: 8 }} />
+                  </div>
+                ))
+              : orderedGames.map((game) => (
+                  <GameCard
+                    key={game.id}
+                    game={game}
+                    selected={game.id === selectedGameId}
+                    onSelect={() => onSelectGame(game)}
+                  />
+                ))}
           </div>
-          {renderScrollableRow(
-            upcomingGames,
-            upcomingRowRef,
-            upcomingControls,
-            setUpcomingControls,
-          )}
+
+          <button
+            aria-label="Scroll games right"
+            className={`${styles.arrow} ${styles.arrowRight}`}
+            onClick={() => scrollRowBy(1)}
+            disabled={!controls.canScrollRight}
+          >
+            ›
+          </button>
         </div>
       )}
     </div>
   );
+}
+
+interface GameCardProps {
+  game: Game;
+  selected: boolean;
+  onSelect: () => void;
+}
+
+function GameCard({ game, selected, onSelect }: GameCardProps) {
+  const isLive = game.statusState === "in";
+  const isPregame = game.statusState === "pre";
+  const isPostgame = !isLive && !isPregame;
+  const rawStatusText = game.statusText?.trim();
+  const statusText =
+    isLive && rawStatusText && /final/i.test(rawStatusText) ? null : rawStatusText;
+  const statusLabel = isLive
+    ? statusText ?? "In Progress"
+    : statusText ?? (isPostgame ? "Final" : game.date);
+  const pregameLabel = isPregame ? formatTipoff(statusLabel) : statusLabel;
+
+  const homeScore = game.score[game.home] ?? 0;
+  const awayScore = game.score[game.away] ?? 0;
+  const leader = homeScore === awayScore ? null : homeScore > awayScore ? game.home : game.away;
+  const matchupColors = getMatchupColors(
+    getTeamPalette(game.away, game.teamColors?.[game.away]),
+    getTeamPalette(game.home, game.teamColors?.[game.home]),
+  );
+
+  const rows = [
+    { team: game.away, score: awayScore, color: matchupColors.away },
+    { team: game.home, score: homeScore, color: matchupColors.home },
+  ];
+
+  return (
+    <button
+      className={styles.card}
+      aria-pressed={selected}
+      data-live={isLive || undefined}
+      onClick={onSelect}
+      style={
+        {
+          "--away-color": matchupColors.away,
+          "--home-color": matchupColors.home,
+        } as CSSProperties
+      }
+    >
+      <div className={styles.cardStatus}>
+        {isLive ? (
+          <span className="game-live-indicator">
+            <span className="game-live-dot" />
+            {statusLabel}
+          </span>
+        ) : (
+          <span>{pregameLabel}</span>
+        )}
+      </div>
+
+      {rows.map((row) => {
+        const dimmed = isPostgame && leader !== null && leader !== row.team;
+
+        return (
+          <div
+            key={row.team}
+            className={styles.teamRow}
+            data-dimmed={dimmed || undefined}
+            style={{ "--team-color": row.color } as CSSProperties}
+          >
+            <span className={styles.teamBar} />
+            <TeamLogo abbr={row.team} logoUrl={game.teamLogos?.[row.team]} size={22} />
+            <span className={styles.teamCode}>{row.team}</span>
+            {game.records?.[row.team] && (
+              <span className={styles.teamRecord}>{game.records[row.team]}</span>
+            )}
+            <span className={styles.teamScore}>
+              {isPregame ? "" : <AnimatedScore value={row.score} />}
+            </span>
+          </div>
+        );
+      })}
+    </button>
+  );
+}
+
+function formatDateChip(date: string): string {
+  const parsed = Date.parse(date);
+  if (Number.isNaN(parsed)) {
+    return date;
+  }
+
+  return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" })
+    .format(new Date(parsed));
+}
+
+// ESPN's pregame text looks like "10/28 - 7:30 PM EDT"; the date is already
+// implied by the selected tab, so keep just the tip-off time.
+function formatTipoff(statusText: string): string {
+  const parts = statusText.split(" - ");
+  return parts.length > 1 ? parts.slice(1).join(" - ") : statusText;
 }

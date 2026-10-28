@@ -1,6 +1,8 @@
 import type { CSSProperties } from "react";
 
-import type { ConferenceStandingRow, Theme } from "../types";
+import { getTeamPalette } from "../color";
+import type { ConferenceStandingRow } from "../types";
+import styles from "./ConferenceStandings.module.css";
 import { TeamLogo } from "./TeamLogo";
 
 interface ConferenceStandingsProps {
@@ -8,16 +10,16 @@ interface ConferenceStandingsProps {
   western: ConferenceStandingRow[];
   loading: boolean;
   error: string | null;
-  theme: Theme;
-  transitionStyle: CSSProperties;
 }
 
 interface TableProps {
   title: string;
   rows: ConferenceStandingRow[];
-  theme: Theme;
-  transitionStyle: CSSProperties;
 }
+
+// Seeds 1–6 make the playoffs outright; 7–10 go to the play-in.
+const PLAYOFF_CUTOFF = 6;
+const PLAY_IN_CUTOFF = 10;
 
 function parseWinPct(value: string): number {
   const parsed = Number.parseFloat(value);
@@ -38,84 +40,70 @@ function sortRowsByWinsDesc(rows: ConferenceStandingRow[]): ConferenceStandingRo
   });
 }
 
-function ConferenceTable({ title, rows, theme, transitionStyle }: TableProps) {
+function ConferenceTable({ title, rows }: TableProps) {
   const sortedRows = sortRowsByWinsDesc(rows);
 
   return (
-    <section
-      style={{
-        background: theme.cardBg,
-        border: `1px solid ${theme.border}`,
-        ...transitionStyle,
-      }}
-    >
-      <div
-        style={{
-          padding: "10px 14px",
-          borderBottom: `1px solid ${theme.border}`,
-          textTransform: "uppercase",
-          fontSize: "12px",
-          letterSpacing: "1px",
-          fontWeight: 800,
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ overflowX: "auto" }}>
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            minWidth: "420px",
-          }}
-        >
+    <section className={styles.panel}>
+      <h2 className={styles.title}>{title}</h2>
+      <div className={`${styles.scroll} scrollbar-hidden`}>
+        <table className={styles.table}>
           <thead>
-            <tr
-              style={{
-                background: theme.subHeader,
-                color: theme.textMuted,
-                fontSize: "11px",
-                letterSpacing: "0.8px",
-                textTransform: "uppercase",
-                textAlign: "left",
-              }}
-            >
-              <th style={{ padding: "8px 12px", fontWeight: 700 }}>Team</th>
-              <th style={{ padding: "8px 10px", fontWeight: 700 }}>W</th>
-              <th style={{ padding: "8px 10px", fontWeight: 700 }}>L</th>
-              <th style={{ padding: "8px 10px", fontWeight: 700 }}>PCT</th>
-              <th style={{ padding: "8px 10px", fontWeight: 700 }}>GB</th>
-              <th style={{ padding: "8px 10px", fontWeight: 700 }}>Strk</th>
-              <th style={{ padding: "8px 10px", fontWeight: 700 }}>L10</th>
+            <tr>
+              <th className={styles.teamHead}>Team</th>
+              <th>W</th>
+              <th>L</th>
+              <th>Pct</th>
+              <th>GB</th>
+              <th>Strk</th>
+              <th>L10</th>
             </tr>
           </thead>
           <tbody>
             {sortedRows.map((entry, index) => {
               const seed = entry.playoffSeed ?? entry.conferenceRank ?? index + 1;
+              const position = index + 1;
+              const zone =
+                position <= PLAYOFF_CUTOFF
+                  ? "playoff"
+                  : position <= PLAY_IN_CUTOFF
+                    ? "playin"
+                    : "out";
+              const isWinStreak = /^w/i.test(entry.streak);
+
               return (
-              <tr
-                key={entry.team}
-                style={{
-                  borderTop: `1px solid ${theme.divider}`,
-                  fontSize: "14px",
-                }}
-              >
-                <td style={{ padding: "10px 12px", fontWeight: 700 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <TeamLogo abbr={entry.team} logoUrl={entry.logo} size={20} />
-                    <span>{seed}. {entry.team}</span>
-                  </div>
-                </td>
-                <td style={{ padding: "10px 10px" }}>{entry.wins}</td>
-                <td style={{ padding: "10px 10px" }}>{entry.losses}</td>
-                <td style={{ padding: "10px 10px", color: theme.textSecond }}>{entry.winPct}</td>
-                <td style={{ padding: "10px 10px", color: theme.textSecond }}>
-                  {entry.gamesBack}
-                </td>
-                <td style={{ padding: "10px 10px", color: theme.textSecond }}>{entry.streak}</td>
-                <td style={{ padding: "10px 10px", color: theme.textSecond }}>{entry.lastTen}</td>
-              </tr>
-            );
+                <tr
+                  key={entry.team}
+                  data-zone={zone}
+                  data-cutoff={
+                    position === PLAYOFF_CUTOFF
+                      ? "playoff"
+                      : position === PLAY_IN_CUTOFF
+                        ? "playin"
+                        : undefined
+                  }
+                  style={{ "--team-color": getTeamPalette(entry.team).primary } as CSSProperties}
+                >
+                  <td className={styles.teamCell}>
+                    <div className={styles.teamInner}>
+                      <span className={styles.seed}>{seed}</span>
+                      <TeamLogo abbr={entry.team} logoUrl={entry.logo} size={26} />
+                      <span className={styles.teamName}>{entry.teamName}</span>
+                      <span className={styles.teamCode}>{entry.team}</span>
+                    </div>
+                  </td>
+                  <td className={`${styles.strong} tabular`}>{entry.wins}</td>
+                  <td className={`${styles.strong} tabular`}>{entry.losses}</td>
+                  <td className="tabular">{entry.winPct}</td>
+                  <td className="tabular">{entry.gamesBack}</td>
+                  <td>
+                    <span className={styles.streak} data-win={isWinStreak || undefined}>
+                      {entry.streak}
+                    </span>
+                  </td>
+                  <td className="tabular">{entry.lastTen}</td>
+                </tr>
+              );
             })}
           </tbody>
         </table>
@@ -124,68 +112,31 @@ function ConferenceTable({ title, rows, theme, transitionStyle }: TableProps) {
   );
 }
 
-export function ConferenceStandings({
-  eastern,
-  western,
-  loading,
-  error,
-  theme,
-  transitionStyle,
-}: ConferenceStandingsProps) {
+export function ConferenceStandings({ eastern, western, loading, error }: ConferenceStandingsProps) {
   if (loading) {
     return (
-      <div
-        style={{
-          padding: "14px 0",
-          fontSize: "12px",
-          letterSpacing: "0.6px",
-          color: theme.textMuted,
-          textTransform: "uppercase",
-          fontWeight: 600,
-        }}
-      >
-        Loading conference standings...
+      <div className={styles.grid} aria-hidden="true">
+        {[0, 1].map((key) => (
+          <span key={key} className="skeleton" style={{ height: 560, borderRadius: 10 }} />
+        ))}
       </div>
     );
   }
 
   if (error) {
-    return (
-      <div
-        style={{
-          padding: "14px 0",
-          fontSize: "12px",
-          letterSpacing: "0.6px",
-          color: theme.textMuted,
-          textTransform: "uppercase",
-          fontWeight: 600,
-        }}
-      >
-        {error}
-      </div>
-    );
+    return <div className={styles.message}>{error}</div>;
   }
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-        gap: "16px",
-      }}
-    >
-      <ConferenceTable
-        title="Eastern Conference"
-        rows={eastern}
-        theme={theme}
-        transitionStyle={transitionStyle}
-      />
-      <ConferenceTable
-        title="Western Conference"
-        rows={western}
-        theme={theme}
-        transitionStyle={transitionStyle}
-      />
-    </div>
+    <>
+      <div className={styles.grid}>
+        <ConferenceTable title="Eastern Conference" rows={eastern} />
+        <ConferenceTable title="Western Conference" rows={western} />
+      </div>
+      <div className={styles.legend}>
+        <span data-zone="playoff">Playoffs</span>
+        <span data-zone="playin">Play-in</span>
+      </div>
+    </>
   );
 }
