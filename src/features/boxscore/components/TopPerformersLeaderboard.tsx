@@ -12,6 +12,7 @@ interface TopPerformersLeaderboardProps {
   performers: TopPerformer[];
   isLoading: boolean;
   error?: string | null;
+  onOpenPlayer?: (playerId: string) => void;
 }
 
 const FEATURED_COUNT = 3;
@@ -23,7 +24,11 @@ export function TopPerformersLeaderboard({
   performers,
   isLoading,
   error,
+  onOpenPlayer,
 }: TopPerformersLeaderboardProps) {
+  const openPlayer = (performer: TopPerformer) =>
+    performer.athleteId && onOpenPlayer ? () => onOpenPlayer(performer.athleteId as string) : undefined;
+
   const featured = performers.slice(0, FEATURED_COUNT);
   const rest = performers.slice(FEATURED_COUNT);
 
@@ -47,6 +52,7 @@ export function TopPerformersLeaderboard({
                 key={`${performer.gameId}-${performer.team}-${performer.name}`}
                 performer={performer}
                 rank={index + 1}
+                onOpen={openPlayer(performer)}
               />
             ))}
           </div>
@@ -55,17 +61,26 @@ export function TopPerformersLeaderboard({
             <ol className={styles.list} start={FEATURED_COUNT + 1}>
               {rest.map((performer, index) => {
                 const color = getTeamPalette(performer.team).primary;
+                const onOpen = openPlayer(performer);
 
                 return (
                   <li
                     key={`${performer.gameId}-${performer.team}-${performer.name}`}
                     className={styles.row}
                     style={{ "--team-color": color } as CSSProperties}
+                    data-clickable={onOpen ? true : undefined}
+                    onClick={onOpen}
                   >
                     <span className={styles.rowRank}>{index + FEATURED_COUNT + 1}</span>
                     <PlayerAvatar name={performer.name} photoUrl={performer.photoUrl} size={38} />
                     <div className={styles.rowName}>
-                      <span>{performer.name}</span>
+                      {onOpen ? (
+                        <button className={styles.nameButton} onClick={onOpen}>
+                          {performer.name}
+                        </button>
+                      ) : (
+                        <span>{performer.name}</span>
+                      )}
                       <span className={styles.rowMeta}>
                         <TeamLogo abbr={performer.team} size={14} />
                         {performer.team} · {performer.pos || "N/A"}
@@ -91,13 +106,21 @@ export function TopPerformersLeaderboard({
   );
 }
 
-function PerformerCard({ performer, rank }: { performer: TopPerformer; rank: number }) {
+interface PerformerCardProps {
+  performer: TopPerformer;
+  rank: number;
+  onOpen?: () => void;
+}
+
+function PerformerCard({ performer, rank, onOpen }: PerformerCardProps) {
   const palette = getTeamPalette(performer.team);
 
   return (
     <article
       className={styles.card}
       data-rank={rank}
+      data-clickable={onOpen ? true : undefined}
+      onClick={onOpen}
       style={{ "--team-color": palette.primary, "--team-alt": palette.alternate } as CSSProperties}
     >
       <div className={styles.cardTop}>
@@ -107,7 +130,15 @@ function PerformerCard({ performer, rank }: { performer: TopPerformer; rank: num
       <div className={styles.cardPhoto}>
         <PlayerAvatar name={performer.name} photoUrl={performer.photoUrl} size={112} />
       </div>
-      <div className={styles.cardName}>{performer.name}</div>
+      <div className={styles.cardName}>
+        {onOpen ? (
+          <button className={styles.nameButton} onClick={onOpen}>
+            {performer.name}
+          </button>
+        ) : (
+          performer.name
+        )}
+      </div>
       <div className={styles.cardMeta}>
         {performer.team} · {performer.pos || "N/A"}
       </div>

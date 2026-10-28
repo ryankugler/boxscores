@@ -203,6 +203,40 @@
   opacity: 0.7;
 }
 
+.card[data-clickable],
+.row[data-clickable] {
+  cursor: pointer;
+}
+
+.card[data-clickable]:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow), 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.row[data-clickable]:hover {
+  background: var(--hover-bg);
+}
+
+.card {
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.nameButton {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .list {
   list-style: none;
   margin: 16px 0 0;

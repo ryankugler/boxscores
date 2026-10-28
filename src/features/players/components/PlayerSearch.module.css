@@ -1,0 +1,137 @@
+.search {
+  position: relative;
+  width: 100%;
+  text-align: left;
+}
+
+.field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.icon {
+  position: absolute;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.field input {
+  width: 100%;
+  height: 44px;
+  padding: 0 40px 0 42px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 500;
+  outline: none;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.22s;
+}
+
+.field input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.field input::placeholder {
+  color: var(--text-dim);
+}
+
+.field input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.search[data-size="large"] .field input {
+  height: 58px;
+  font-size: 19px;
+  padding-left: 50px;
+  border-radius: 12px;
+}
+
+.search[data-size="large"] .icon {
+  left: 18px;
+  width: 22px;
+  height: 22px;
+}
+
+.spinner {
+  position: absolute;
+  right: 14px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+  border-top-color: var(--brand);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.results {
+  position: absolute;
+  z-index: 15;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow), 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+.result {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.result[aria-selected="true"] {
+  background: var(--hover-bg);
+}
+
+.resultName {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resultMeta {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 14px 10px;
+  color: var(--text-muted);
+  font-size: 14px;
+}

@@ -8,6 +8,7 @@ import {
   fetchScoreboardGamesForDate,
 } from "./api/espn";
 import NBAPlayoffBracket from "../playoffBracket/NBAPlayoffBracket";
+import { PlayersPage } from "../players/PlayersPage";
 import styles from "./BoxScoreDashboard.module.css";
 import { getReadableAccent, getTeamPalette } from "./color";
 import { ConferenceStandings } from "./components/ConferenceStandings";
@@ -514,7 +515,11 @@ export function BoxScoreDashboard() {
       return;
     }
 
-    const viewTitles: Record<View, string> = {
+    if (activeView === "players") {
+      return;
+    }
+
+    const viewTitles: Record<Exclude<View, "players">, string> = {
       boxscores: "Box Scores",
       leaderboard: "Leaderboard",
       standings: "Standings",
@@ -587,6 +592,14 @@ export function BoxScoreDashboard() {
     }
   };
 
+  const handleOpenPlayer = (playerId: string) => {
+    navigate({ view: "players", playerId });
+  };
+
+  const handleOpenGame = (gameId: string) => {
+    navigate({ view: "boxscores", gameId });
+  };
+
   const handleSelectView = (view: View) => {
     if (view === "boxscores" && game) {
       navigate({ view, gameId: route.gameId ? game.id : undefined });
@@ -625,13 +638,15 @@ export function BoxScoreDashboard() {
       )}
 
       <main className={styles.main}>
-        <StatusBar
-          usingSampleData={usingSampleData}
-          refreshFailed={refreshFailed}
-          lastUpdatedAt={lastUpdatedAt}
-          live={todayHasLiveGame && !usingSampleData}
-          onRetry={() => setScoreboardRequest((count) => count + 1)}
-        />
+        {activeView !== "players" && (
+          <StatusBar
+            usingSampleData={usingSampleData}
+            refreshFailed={refreshFailed}
+            lastUpdatedAt={lastUpdatedAt}
+            live={todayHasLiveGame && !usingSampleData}
+            onRetry={() => setScoreboardRequest((count) => count + 1)}
+          />
+        )}
 
         {activeView === "boxscores" && (
           <>
@@ -676,6 +691,7 @@ export function BoxScoreDashboard() {
                         accent={activePalette ? getReadableAccent(activePalette, dark) : "#e8401a"}
                         emptyMessage={boxScoreEmptyMessage}
                         onSort={handleSort}
+                        onOpenPlayer={handleOpenPlayer}
                       />
                     )}
                   </>
@@ -692,6 +708,16 @@ export function BoxScoreDashboard() {
             performers={leaderboardPerformers}
             isLoading={loadingLeaderboard}
             error={leaderboardError}
+            onOpenPlayer={handleOpenPlayer}
+          />
+        )}
+
+        {activeView === "players" && (
+          <PlayersPage
+            playerId={route.playerId}
+            dark={dark}
+            onSelectPlayer={handleOpenPlayer}
+            onOpenGame={handleOpenGame}
           />
         )}
 

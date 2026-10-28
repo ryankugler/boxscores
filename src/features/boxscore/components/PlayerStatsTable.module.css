@@ -139,6 +139,25 @@
   max-width: 180px;
 }
 
+.playerLink {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.15s, color 0.15s;
+}
+
+.playerLink:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+
 .posCell {
   text-align: center;
   padding: 7px 6px;

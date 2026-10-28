@@ -24,6 +24,7 @@ interface PlayerStatsTableProps {
   accent: string;
   emptyMessage?: string | null;
   onSort: (column: StatColumn) => void;
+  onOpenPlayer?: (playerId: string) => void;
 }
 
 export function PlayerStatsTable({
@@ -37,6 +38,7 @@ export function PlayerStatsTable({
   accent,
   emptyMessage,
   onSort,
+  onOpenPlayer,
 }: PlayerStatsTableProps) {
   const leaders = getColumnLeaders(sortedPlayers);
 
@@ -95,7 +97,16 @@ export function PlayerStatsTable({
                       size={30}
                       className={styles.avatar}
                     />
-                    <span className={styles.playerName}>{player.name}</span>
+                    {player.athleteId && onOpenPlayer ? (
+                      <button
+                        className={`${styles.playerName} ${styles.playerLink}`}
+                        onClick={() => onOpenPlayer(player.athleteId as string)}
+                      >
+                        {player.name}
+                      </button>
+                    ) : (
+                      <span className={styles.playerName}>{player.name}</span>
+                    )}
                   </div>
                 </td>
                 <td className={styles.posCell}>{player.pos}</td>
