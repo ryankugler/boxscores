@@ -57,6 +57,16 @@ function gameHasBoxscoreData(game: Game): boolean {
   );
 }
 
+function formatToday(): string {
+  return DATE_FORMATTER.format(new Date());
+}
+
+// The Today slate is today's games plus any game still in progress from an
+// earlier date, so a late tip-off doesn't vanish when the clock passes midnight.
+function isInTodaySlate(game: Game, todayLabel: string): boolean {
+  return game.date === todayLabel || game.statusState === "in";
+}
+
 function isCompletedGame(game: Game): boolean {
   if (game.statusState === "post") {
     return true;
@@ -151,7 +161,7 @@ export function BoxScoreDashboard() {
   const leaderboardRequestIdRef = useRef(0);
   const appliedRouteGameIdRef = useRef<string | undefined>(undefined);
 
-  const todayLabel = useMemo(() => DATE_FORMATTER.format(new Date()), []);
+  const [todayLabel, setTodayLabel] = useState(formatToday);
   const completedGames = useMemo(() => games.filter(isCompletedGame), [games]);
   const availableHistoricalDates = useMemo(() => {
     const unique = new Set(completedGames.map((item) => item.date).filter(Boolean));
@@ -162,7 +172,7 @@ export function BoxScoreDashboard() {
     return [TODAY_TAB, ...availableHistoricalDates];
   }, [availableHistoricalDates]);
   const gamesForToday = useMemo(() => {
-    return games.filter((item) => item.date === todayLabel);
+    return games.filter((item) => isInTodaySlate(item, todayLabel));
   }, [games, todayLabel]);
   const gamesForSelectedDate = useMemo(() => {
     if (selectedDateTab === TODAY_TAB) {
@@ -174,12 +184,20 @@ export function BoxScoreDashboard() {
   const selectedDateLabel = selectedDateTab === TODAY_TAB ? todayLabel : selectedDateTab;
 
   const game = useMemo(() => {
-    return (
-      gamesForSelectedDate.find((item) => item.id === selectedGameId) ??
-      gamesForSelectedDate[0] ??
-      null
-    );
-  }, [gamesForSelectedDate, selectedGameId]);
+    const selected = gamesForSelectedDate.find((item) => item.id === selectedGameId);
+    if (selected) {
+      return selected;
+    }
+
+    // A carried-over game that just went final leaves the Today slate; stay
+    // on it rather than jumping to another game (the tab follows it below).
+    const finishedCarryover =
+      selectedDateTab === TODAY_TAB
+        ? completedGames.find((item) => item.id === selectedGameId)
+        : undefined;
+
+    return finishedCarryover ?? gamesForSelectedDate[0] ?? null;
+  }, [completedGames, gamesForSelectedDate, selectedDateTab, selectedGameId]);
 
   const selectGame = useCallback((selected: Game) => {
     setSelectedGameId(selected.id);
@@ -197,6 +215,24 @@ export function BoxScoreDashboard() {
   }, [game, selectedGameId, selectGame]);
 
   useEffect(() => {
+    if (selectedDateTab === TODAY_TAB && game && !gamesForToday.includes(game)) {
+      setSelectedDateTab(game.date);
+    }
+  }, [game, gamesForToday, selectedDateTab]);
+
+  // Roll the Today slate over at midnight for pages left open overnight.
+  useEffect(() => {
+    const syncToday = () => setTodayLabel(formatToday());
+    const intervalId = window.setInterval(syncToday, 60_000);
+    document.addEventListener("visibilitychange", syncToday);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", syncToday);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadScoreboard = async () => {
@@ -208,7 +244,10 @@ export function BoxScoreDashboard() {
           return;
         }
 
-        const todayGame = apiGames.find((item) => item.date === todayLabel);
+        const today = formatToday();
+        const todayGame =
+          apiGames.find((item) => item.statusState === "in") ??
+          apiGames.find((item) => item.date === today);
         const preferredGame = apiGames.find((item) => item.statusState !== "pre") ?? apiGames[0];
         const initialGame = todayGame ?? preferredGame;
 
@@ -240,7 +279,7 @@ export function BoxScoreDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [todayLabel, scoreboardRequest, selectGame]);
+  }, [scoreboardRequest, selectGame]);
 
   // Apply a /game/:id URL (first load, or back/forward navigation). Games
   // outside the loaded scoreboard window are fetched individually.
@@ -252,7 +291,7 @@ export function BoxScoreDashboard() {
 
     const applyGame = (target: Game) => {
       appliedRouteGameIdRef.current = target.id;
-      setSelectedDateTab(target.date === todayLabel ? TODAY_TAB : target.date);
+      setSelectedDateTab(isInTodaySlate(target, todayLabel) ? TODAY_TAB : target.date);
       selectGame(target);
     };
 
@@ -331,6 +370,11 @@ export function BoxScoreDashboard() {
   // Keep today's scoreboard fresh while games are live or about to start.
   const todayHasLiveGame = gamesForToday.some((item) => item.statusState === "in");
   const todayHasPendingGame = gamesForToday.some((item) => item.statusState === "pre");
+  // Live games from last night live on an earlier scoreboard date, so refresh
+  // those dates too.
+  const refreshDatesKey = [
+    ...new Set([todayLabel, ...gamesForToday.map((item) => item.date).filter(Boolean)]),
+  ].join("|");
 
   useEffect(() => {
     if (usingSampleData || (!todayHasLiveGame && !todayHasPendingGame)) {
@@ -346,7 +390,8 @@ export function BoxScoreDashboard() {
       }
 
       try {
-        const fresh = await fetchScoreboardGamesForDate(new Date());
+        const dates = refreshDatesKey.split("|").map((label) => new Date(parseGameDate(label)));
+        const fresh = (await Promise.all(dates.map(fetchScoreboardGamesForDate))).flat();
         if (cancelled) {
           return;
         }
@@ -369,7 +414,7 @@ export function BoxScoreDashboard() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [usingSampleData, todayHasLiveGame, todayHasPendingGame]);
+  }, [usingSampleData, todayHasLiveGame, todayHasPendingGame, refreshDatesKey]);
 
   const hasBoxscoreData = game ? gameHasBoxscoreData(game) : false;
   const isPregame = game?.statusState === "pre";
@@ -595,6 +640,10 @@ export function BoxScoreDashboard() {
     navigate({ view: "players", playerId });
   };
 
+  const handleComparePlayers = (playerId: string, compareId: string | undefined) => {
+    navigate({ view: "players", playerId, compareId });
+  };
+
   const handleOpenGame = (gameId: string) => {
     navigate({ view: "boxscores", gameId });
   };
@@ -714,8 +763,10 @@ export function BoxScoreDashboard() {
         {activeView === "players" && (
           <PlayersPage
             playerId={route.playerId}
+            compareId={route.compareId}
             dark={dark}
             onSelectPlayer={handleOpenPlayer}
+            onCompare={handleComparePlayers}
             onOpenGame={handleOpenGame}
           />
         )}

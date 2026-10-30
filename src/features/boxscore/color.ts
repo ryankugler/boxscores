@@ -91,7 +91,7 @@ export function getReadableAccent(palette: TeamPalette, dark: boolean): string {
   return alternateLum <= 0.5 ? palette.alternate : "#0b0c10";
 }
 
-function colorDistance(a: string, b: string): number {
+export function colorDistance(a: string, b: string): number {
   const rgbA = hexToRgb(a);
   const rgbB = hexToRgb(b);
   if (!rgbA || !rgbB) {

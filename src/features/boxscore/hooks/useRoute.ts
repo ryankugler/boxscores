@@ -6,6 +6,7 @@ export interface Route {
   view: View;
   gameId?: string;
   playerId?: string;
+  compareId?: string;
 }
 
 const VIEW_PATHS: Record<Exclude<View, "boxscores">, string> = {
@@ -23,9 +24,13 @@ export function parseRoute(pathname: string): Route {
     return { view: "boxscores", gameId: decodeURIComponent(gameMatch[1]) };
   }
 
-  const playerMatch = path.match(/^\/players\/([^/]+)$/);
+  const playerMatch = path.match(/^\/players\/([^/]+)(?:\/vs\/([^/]+))?$/);
   if (playerMatch) {
-    return { view: "players", playerId: decodeURIComponent(playerMatch[1]) };
+    return {
+      view: "players",
+      playerId: decodeURIComponent(playerMatch[1]),
+      compareId: playerMatch[2] ? decodeURIComponent(playerMatch[2]) : undefined,
+    };
   }
 
   const view = (Object.keys(VIEW_PATHS) as Array<keyof typeof VIEW_PATHS>).find(
@@ -41,7 +46,8 @@ export function routeToPath(route: Route): string {
   }
 
   if (route.view === "players" && route.playerId) {
-    return `/players/${encodeURIComponent(route.playerId)}`;
+    const playerPath = `/players/${encodeURIComponent(route.playerId)}`;
+    return route.compareId ? `${playerPath}/vs/${encodeURIComponent(route.compareId)}` : playerPath;
   }
 
   return VIEW_PATHS[route.view];
