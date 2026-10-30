@@ -79,6 +79,79 @@
 
 .toolbar {
   max-width: 420px;
+  flex: 1;
+}
+
+.toolbarRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.compareEntry {
+  width: 300px;
+  max-width: 100%;
+}
+
+.compareButton,
+.exitCompare,
+.swapButton {
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-second);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s, color 0.15s, background 0.22s;
+}
+
+.compareButton:hover,
+.exitCompare:hover,
+.swapButton:hover {
+  border-color: var(--brand);
+  color: var(--text-primary);
+}
+
+.compareButton {
+  background: var(--header-bg);
+  border-color: var(--header-bg);
+  color: var(--header-ink);
+}
+
+.compareToolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.compareSlot > span {
+  display: block;
+  margin: 0 0 6px 2px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.swapButton {
+  width: 44px;
+  padding: 0;
+  font-size: 20px;
+}
+
+.exitShort {
+  display: none;
 }
 
 .message {
@@ -197,6 +270,32 @@
 @media (max-width: 760px) {
   .toolbar {
     max-width: none;
+    flex-basis: 100%;
+  }
+
+  .compareEntry {
+    width: 100%;
+  }
+
+  .compareButton {
+    width: 100%;
+  }
+
+  .compareToolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .exitCompare {
+    width: 44px;
+    padding: 0;
+  }
+
+  .exitLong {
+    display: none;
+  }
+
+  .exitShort {
+    display: inline;
   }
 
   .summary {

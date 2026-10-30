@@ -2,85 +2,81 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import { getReadableAccent, getTeamPalette, readableTextOn } from "../boxscore/color";
 import { PlayerAvatar } from "../boxscore/components/PlayerAvatar";
-import { fetchPlayerGameLog, fetchPlayerProfile } from "./api";
 import { GameLogTable } from "./components/GameLogTable";
+import { PlayerComparison } from "./components/PlayerComparison";
 import { PlayerHero } from "./components/PlayerHero";
 import { PlayerSearch } from "./components/PlayerSearch";
 import { PointsChart } from "./components/PointsChart";
 import styles from "./PlayersPage.module.css";
 import { readRecentPlayers, rememberPlayer } from "./recentPlayers";
-import type { PlayerGameLog, PlayerProfile, PlayerSearchResult } from "./types";
+import type { PlayerProfile, PlayerSearchResult } from "./types";
+import { usePlayerData } from "./usePlayerData";
 
 interface PlayersPageProps {
   playerId?: string;
+  compareId?: string;
   dark: boolean;
   onSelectPlayer: (playerId: string) => void;
+  onCompare: (playerId: string, compareId: string | undefined) => void;
   onOpenGame: (eventId: string) => void;
 }
 
-interface PlayerData {
-  playerId: string;
-  profile: PlayerProfile | null;
-  gameLog: PlayerGameLog | null;
-  error: string | null;
+function toRecentPlayer(profile: PlayerProfile): PlayerSearchResult {
+  return {
+    id: profile.id,
+    name: profile.name,
+    team: profile.team,
+    position: profile.position,
+    jersey: profile.jersey,
+    headshot: profile.headshot,
+  };
 }
 
-export function PlayersPage({ playerId, dark, onSelectPlayer, onOpenGame }: PlayersPageProps) {
-  const [data, setData] = useState<PlayerData | null>(null);
-  const [recentPlayers, setRecentPlayers] = useState<PlayerSearchResult[]>(readRecentPlayers);
+export function PlayersPage({
+  playerId,
+  compareId,
+  dark,
+  onSelectPlayer,
+  onCompare,
+  onOpenGame,
+}: PlayersPageProps) {
+  const player = usePlayerData(playerId);
+  const rival = usePlayerData(compareId);
   const [seasonTypeKey, setSeasonTypeKey] = useState<string | null>(null);
+  const [comparing, setComparing] = useState(false);
+
+  const profile = player.profile;
+  const rivalProfile = rival.profile;
+
+  // A new player starts on their first season type with the compare picker closed.
+  const [shownPlayerId, setShownPlayerId] = useState(playerId);
+  if (shownPlayerId !== playerId) {
+    setShownPlayerId(playerId);
+    setSeasonTypeKey(null);
+    setComparing(false);
+  }
+
+  useEffect(() => {
+    if (profile) {
+      rememberPlayer(toRecentPlayer(profile));
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (rivalProfile) {
+      rememberPlayer(toRecentPlayer(rivalProfile));
+    }
+  }, [rivalProfile]);
 
   useEffect(() => {
     if (!playerId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    Promise.allSettled([fetchPlayerProfile(playerId), fetchPlayerGameLog(playerId)]).then(
-      ([profileResult, gameLogResult]) => {
-        if (cancelled) {
-          return;
-        }
-
-        const profile = profileResult.status === "fulfilled" ? profileResult.value : null;
-        const gameLog = gameLogResult.status === "fulfilled" ? gameLogResult.value : null;
-
-        setData({
-          playerId,
-          profile,
-          gameLog,
-          error: profile ? null : "We couldn't load this player. Check the link or try another search.",
-        });
-        setSeasonTypeKey(null);
-
-        if (profile) {
-          setRecentPlayers(
-            rememberPlayer({
-              id: profile.id,
-              name: profile.name,
-              team: profile.team,
-              position: profile.position,
-              jersey: profile.jersey,
-              headshot: profile.headshot,
-            }),
-          );
-        }
-      },
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [playerId]);
-
-  useEffect(() => {
-    if (data?.profile && data.playerId === playerId) {
-      document.title = `${data.profile.name} · whowon`;
-    } else if (!playerId) {
       document.title = "Players · whowon";
+    } else if (compareId && profile && rivalProfile) {
+      document.title = `${profile.name} vs ${rivalProfile.name} · whowon`;
+    } else if (!compareId && profile) {
+      document.title = `${profile.name} · whowon`;
     }
-  }, [data, playerId]);
+  }, [playerId, compareId, profile, rivalProfile]);
 
   const search = (
     <PlayerSearch
@@ -91,6 +87,8 @@ export function PlayersPage({ playerId, dark, onSelectPlayer, onOpenGame }: Play
   );
 
   if (!playerId) {
+    const recentPlayers = readRecentPlayers();
+
     return (
       <div className={styles.page}>
         <section className={styles.landing}>
@@ -123,9 +121,65 @@ export function PlayersPage({ playerId, dark, onSelectPlayer, onOpenGame }: Play
     );
   }
 
-  const loading = data?.playerId !== playerId;
-  const profile = loading ? null : data?.profile;
-  const gameLog = loading ? null : data?.gameLog;
+  if (compareId) {
+    const loadingPair = player.loading || rival.loading;
+    const pairError = player.error ?? rival.error;
+
+    return (
+      <div className={styles.page}>
+        <div className={styles.compareToolbar}>
+          <div className={styles.compareSlot}>
+            <span>Player 1</span>
+            <PlayerSearch onSelect={(next) => onCompare(next.id, compareId)} />
+          </div>
+          <button
+            className={styles.swapButton}
+            onClick={() => onCompare(compareId, playerId)}
+            aria-label="Swap players"
+            title="Swap players"
+          >
+            ⇄
+          </button>
+          <div className={styles.compareSlot}>
+            <span>Player 2</span>
+            <PlayerSearch onSelect={(next) => onCompare(playerId, next.id)} />
+          </div>
+          <button
+            className={styles.exitCompare}
+            onClick={() => onCompare(playerId, undefined)}
+            aria-label="Exit compare"
+            title="Exit compare"
+          >
+            <span className={styles.exitLong}>Exit compare</span>
+            <span className={styles.exitShort} aria-hidden="true">
+              ✕
+            </span>
+          </button>
+        </div>
+
+        {loadingPair && (
+          <div aria-hidden="true">
+            <span className="skeleton" style={{ height: 150, borderRadius: 12 }} />
+            <span className="skeleton" style={{ height: 460, marginTop: 20, borderRadius: 10 }} />
+          </div>
+        )}
+
+        {!loadingPair && pairError && <div className={styles.message}>{pairError}</div>}
+
+        {profile && rivalProfile && (
+          <PlayerComparison
+            left={{ profile, gameLog: player.gameLog }}
+            right={{ profile: rivalProfile, gameLog: rival.gameLog }}
+            dark={dark}
+            onOpenPlayer={onSelectPlayer}
+          />
+        )}
+      </div>
+    );
+  }
+
+  const loading = player.loading;
+  const gameLog = player.gameLog;
   const seasonTypes = gameLog?.seasonTypes ?? [];
   const activeSeasonType =
     seasonTypes.find((seasonType) => seasonType.key === seasonTypeKey) ?? seasonTypes[0];
@@ -149,7 +203,26 @@ export function PlayersPage({ playerId, dark, onSelectPlayer, onOpenGame }: Play
         } as CSSProperties
       }
     >
-      <div className={styles.toolbar}>{search}</div>
+      <div className={styles.toolbarRow}>
+        <div className={styles.toolbar}>{search}</div>
+        {profile && (
+          <div className={styles.compareEntry}>
+            {comparing ? (
+              <PlayerSearch
+                autoFocus
+                onSelect={(next) => {
+                  setComparing(false);
+                  onCompare(profile.id, next.id);
+                }}
+              />
+            ) : (
+              <button className={styles.compareButton} onClick={() => setComparing(true)}>
+                Compare with…
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {loading && (
         <div aria-hidden="true">
@@ -159,7 +232,7 @@ export function PlayersPage({ playerId, dark, onSelectPlayer, onOpenGame }: Play
         </div>
       )}
 
-      {!loading && data?.error && <div className={styles.message}>{data.error}</div>}
+      {!loading && player.error && <div className={styles.message}>{player.error}</div>}
 
       {profile && (
         <>
