@@ -128,27 +128,3 @@ export interface ConferenceStandings {
   eastern: ConferenceStandingRow[];
   western: ConferenceStandingRow[];
 }
-
-export interface Theme {
-  pageBg: string;
-  headerBg: string;
-  cardBg: string;
-  altRowBg: string;
-  border: string;
-  hoverBg: string;
-  subHeader: string;
-  divider: string;
-  textPrimary: string;
-  textSecond: string;
-  textMuted: string;
-  textDim: string;
-  textMono: string;
-  posColor: string;
-  badgeOff: string;
-  badgeTextOff: string;
-  badgeTextOn: string;
-  scoreDim: string;
-  toWarn: string;
-  toggleBg: string;
-  toggleLabel: string;
-}
