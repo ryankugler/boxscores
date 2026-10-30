@@ -23,7 +23,6 @@ import { GAMES } from "./data/games";
 import { useRoute, type View } from "./hooks/useRoute";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { COL_KEY, getTopPerformersForDate, sortPlayers } from "./stats";
-import { THEME, TRANSITION_STYLE } from "./theme";
 
 import type {
   ConferenceStandings as ConferenceStandingsData,
@@ -731,16 +730,11 @@ export function BoxScoreDashboard() {
         )}
 
         {activeView === "playoffs" && (
-          <div className={styles.bracket}>
-            <NBAPlayoffBracket
-              dark={dark}
-              theme={THEME}
-              transitionStyle={TRANSITION_STYLE}
-              standings={conferenceStandings}
-              loading={loadingStandings}
-              error={standingsError}
-            />
-          </div>
+          <NBAPlayoffBracket
+            standings={conferenceStandings}
+            loading={loadingStandings}
+            error={standingsError}
+          />
         )}
       </main>
     </div>
