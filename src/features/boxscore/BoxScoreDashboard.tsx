@@ -7,6 +7,7 @@ import {
   fetchScoreboardGames,
   fetchScoreboardGamesForDate,
 } from "./api/espn";
+import { SeasonLeaders } from "../leaders/SeasonLeaders";
 import NBAPlayoffBracket from "../playoffBracket/NBAPlayoffBracket";
 import { PlayersPage } from "../players/PlayersPage";
 import styles from "./BoxScoreDashboard.module.css";
@@ -131,6 +132,7 @@ export function BoxScoreDashboard() {
   const { route, navigate } = useRoute();
   const { dark, toggle: toggleTheme } = useThemePreference();
   const activeView = route.view;
+  const showSeasonLeaders = activeView === "leaderboard" && Boolean(route.season);
 
   const [games, setGames] = useState<Game[]>([]);
   const [selectedDateTab, setSelectedDateTab] = useState<string>(TODAY_TAB);
@@ -487,7 +489,7 @@ export function BoxScoreDashboard() {
   }, [game, usingSampleData, hasBoxscoreData, isPregame, isLiveGame, lastDetailsFetchAt]);
 
   useEffect(() => {
-    if (activeView !== "leaderboard" || !selectedDateLabel) {
+    if (activeView !== "leaderboard" || showSeasonLeaders || !selectedDateLabel) {
       return;
     }
 
@@ -551,7 +553,7 @@ export function BoxScoreDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [activeView, selectedDateLabel]);
+  }, [activeView, showSeasonLeaders, selectedDateLabel]);
 
   useEffect(() => {
     if (activeView === "boxscores" && game && game.statusState !== "pre") {
@@ -569,8 +571,8 @@ export function BoxScoreDashboard() {
       standings: "Standings",
       playoffs: "Playoff Bracket",
     };
-    document.title = `${viewTitles[activeView]} · whowon`;
-  }, [activeView, game]);
+    document.title = `${showSeasonLeaders ? "Season Leaders" : viewTitles[activeView]} · whowon`;
+  }, [activeView, showSeasonLeaders, game]);
 
   const players = useMemo(() => {
     if (!game) {
@@ -657,7 +659,8 @@ export function BoxScoreDashboard() {
     navigate({ view });
   };
 
-  const showGameSelector = activeView === "boxscores" || activeView === "leaderboard";
+  const showGameSelector =
+    activeView === "boxscores" || (activeView === "leaderboard" && !showSeasonLeaders);
   const boxScoreEmptyMessage =
     isLiveGame && !hasBoxscoreData
       ? "Live game in progress. Box score is populating."
@@ -750,6 +753,25 @@ export function BoxScoreDashboard() {
         )}
 
         {activeView === "leaderboard" && (
+          <div className={styles.leaderMode} role="tablist" aria-label="Leaderboard range">
+            <button
+              role="tab"
+              aria-selected={!showSeasonLeaders}
+              onClick={() => navigate({ view: "leaderboard" })}
+            >
+              Daily
+            </button>
+            <button
+              role="tab"
+              aria-selected={showSeasonLeaders}
+              onClick={() => navigate({ view: "leaderboard", season: true })}
+            >
+              Season
+            </button>
+          </div>
+        )}
+
+        {activeView === "leaderboard" && !showSeasonLeaders && (
           <TopPerformersLeaderboard
             limit={TOP_PERFORMERS_LIMIT}
             dateLabel={selectedDateLabel}
@@ -758,6 +780,12 @@ export function BoxScoreDashboard() {
             error={leaderboardError}
             onOpenPlayer={handleOpenPlayer}
           />
+        )}
+
+        {showSeasonLeaders && (
+          <div className={styles.seasonLeaders}>
+            <SeasonLeaders onOpenPlayer={handleOpenPlayer} onCompare={handleComparePlayers} />
+          </div>
         )}
 
         {activeView === "players" && (

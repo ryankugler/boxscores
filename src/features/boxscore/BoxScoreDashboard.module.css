@@ -11,6 +11,38 @@
   padding: 0 clamp(16px, 4vw, 28px) 48px;
 }
 
+.leaderMode {
+  display: inline-flex;
+  margin-top: 20px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+}
+
+.leaderMode button {
+  border: none;
+  border-radius: 6px;
+  padding: 7px 18px 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.leaderMode button[aria-selected="true"] {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+.seasonLeaders {
+  padding-top: 20px;
+}
+
 .gameView {
   margin-top: 20px;
 }

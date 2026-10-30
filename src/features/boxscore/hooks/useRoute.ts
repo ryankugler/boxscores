@@ -7,6 +7,7 @@ export interface Route {
   gameId?: string;
   playerId?: string;
   compareId?: string;
+  season?: boolean;
 }
 
 const VIEW_PATHS: Record<Exclude<View, "boxscores">, string> = {
@@ -22,6 +23,10 @@ export function parseRoute(pathname: string): Route {
 
   if (gameMatch) {
     return { view: "boxscores", gameId: decodeURIComponent(gameMatch[1]) };
+  }
+
+  if (path === "/leaderboard/season") {
+    return { view: "leaderboard", season: true };
   }
 
   const playerMatch = path.match(/^\/players\/([^/]+)(?:\/vs\/([^/]+))?$/);
@@ -48,6 +53,10 @@ export function routeToPath(route: Route): string {
   if (route.view === "players" && route.playerId) {
     const playerPath = `/players/${encodeURIComponent(route.playerId)}`;
     return route.compareId ? `${playerPath}/vs/${encodeURIComponent(route.compareId)}` : playerPath;
+  }
+
+  if (route.view === "leaderboard" && route.season) {
+    return "/leaderboard/season";
   }
 
   return VIEW_PATHS[route.view];
