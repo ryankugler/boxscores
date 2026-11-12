@@ -400,11 +400,25 @@
     text-align: center;
   }
 
-  .rowStats {
-    display: none;
+  .row {
+    display: grid;
+    grid-template-columns: 36px auto minmax(0, 1fr) auto;
+    column-gap: 12px;
+    row-gap: 6px;
   }
 
-  .rowTotal {
-    margin-left: auto;
+  .rowStats {
+    grid-row: 2;
+    grid-column: 2 / -1;
+    margin-left: 0;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .rowStats b {
+    font-size: 16px;
   }
 }
